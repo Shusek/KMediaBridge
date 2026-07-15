@@ -201,6 +201,30 @@ public class BundledFfmpegNativeDriver private constructor(
                     classLoader = classLoader,
                 ),
             )
+
+        /**
+         * Loads a runtime according to an explicit source policy.
+         *
+         * Preference policies fall back only when the preferred source has no
+         * manifest. A present but invalid or non-compliant runtime is rejected
+         * instead of being silently bypassed.
+         */
+        @JvmStatic
+        @JvmOverloads
+        public fun load(
+            runtimeSelection: FfmpegRuntimeSelection,
+            extractionParentDirectory: Path? = null,
+            classLoader: ClassLoader =
+                Thread.currentThread().contextClassLoader
+                    ?: BundledFfmpegNativeDriver::class.java.classLoader,
+        ): BundledFfmpegNativeDriver =
+            BundledFfmpegNativeDriver(
+                DesktopRuntimeLoader.load(
+                    runtimeSelection = runtimeSelection,
+                    extractionParentDirectory = extractionParentDirectory,
+                    classLoader = classLoader,
+                ),
+            )
     }
 }
 

@@ -28,9 +28,14 @@ For desktop JVM, place the rebuilt libraries and a matching
 `manifest.properties` in one directory and select it explicitly:
 
 ```kotlin
-BundledFfmpegNativeDriver.load(replacementDirectory = Path.of("/replacement"))
+BundledFfmpegNativeDriver.load(
+    runtimeSelection = FfmpegRuntimeSelection.fromExternalDirectory(Path.of("/replacement")),
+)
 ```
 
 The manifest lists every library name/hash, ABI, reported FFmpeg identity,
 source offer, and immutable recipe revision. The loader verifies the replacement
 directory rather than comparing it to hashes from the official bundle.
+`PREFER_EXTERNAL` and `PREFER_BUNDLED` provide a controlled fallback order,
+but a present manifest that fails validation always stops loading instead of
+silently selecting the other source.

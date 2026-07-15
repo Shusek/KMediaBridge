@@ -10,6 +10,12 @@ public data class NativeComponentInfo(
     public val sourceArchiveSha256: String,
 )
 
+/** Identifies where the verified native FFmpeg runtime was loaded from. */
+public enum class FfmpegRuntimeOrigin {
+    BUNDLED,
+    EXTERNAL_DIRECTORY,
+}
+
 public data class FfmpegRuntimeInfo(
     public val ffmpegVersion: String,
     public val ffmpegLicenseSpdx: String,
@@ -23,6 +29,7 @@ public data class FfmpegRuntimeInfo(
     public val exactCorrespondingSourceAvailable: Boolean,
     public val dynamicLinkingVerified: Boolean,
     public val linkedComponents: List<NativeComponentInfo> = emptyList(),
+    public val origin: FfmpegRuntimeOrigin = FfmpegRuntimeOrigin.BUNDLED,
 )
 
 public data class ComplianceViolation(

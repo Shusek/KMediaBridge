@@ -136,6 +136,17 @@ internal object DesktopRuntimeLoader {
     private const val MANIFEST_NAME = "manifest.properties"
 
     fun load(
+        runtimeSelection: FfmpegRuntimeSelection,
+        extractionParentDirectory: Path?,
+        classLoader: ClassLoader,
+    ): LoadedFfmpegRuntime =
+        load(
+            replacementDirectory = selectExternalRuntimeDirectory(runtimeSelection, classLoader),
+            extractionParentDirectory = extractionParentDirectory,
+            classLoader = classLoader,
+        )
+
+    fun load(
         replacementDirectory: Path?,
         extractionParentDirectory: Path?,
         classLoader: ClassLoader,
@@ -205,9 +216,38 @@ internal object DesktopRuntimeLoader {
                 buildRecipeRevision = manifest.buildRecipeRevision,
                 exactCorrespondingSourceAvailable = manifest.exactCorrespondingSourceAvailable,
                 dynamicLinkingVerified = manifest.dynamicLinkingVerified,
+                origin =
+                    if (replacementDirectory == null) {
+                        FfmpegRuntimeOrigin.BUNDLED
+                    } else {
+                        FfmpegRuntimeOrigin.EXTERNAL_DIRECTORY
+                    },
             )
         FfmpegComplianceVerifier.requireCompliant(runtimeInfo)
         return LoadedFfmpegRuntime(api, retained, runtimeInfo)
+    }
+
+    internal fun selectExternalRuntimeDirectory(
+        runtimeSelection: FfmpegRuntimeSelection,
+        classLoader: ClassLoader,
+    ): Path? {
+        val platform = DesktopPlatform.detect()
+        val externalDirectory = runtimeSelection.externalRuntimeDirectory
+        val bundledAvailable =
+            classLoader.getResource("META-INF/kmediabridge/native/${platform.id}/$MANIFEST_NAME") != null
+        val externalAvailable =
+            externalDirectory
+                ?.toAbsolutePath()
+                ?.normalize()
+                ?.resolve(MANIFEST_NAME)
+                ?.let(Files::isRegularFile) == true
+
+        return when (runtimeSelection.policy) {
+            FfmpegRuntimePolicy.BUNDLED_ONLY -> null
+            FfmpegRuntimePolicy.EXTERNAL_ONLY -> externalDirectory
+            FfmpegRuntimePolicy.PREFER_BUNDLED -> if (bundledAvailable) null else externalDirectory
+            FfmpegRuntimePolicy.PREFER_EXTERNAL -> if (externalAvailable) externalDirectory else null
+        }
     }
 
     private fun verifyLibraries(

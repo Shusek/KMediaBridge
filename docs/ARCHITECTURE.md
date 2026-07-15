@@ -30,6 +30,11 @@ and ABI details never appear in application-facing contracts.
 ## Runtime rules
 
 - No application code invokes an FFmpeg executable.
+- Runtime source selection is typed: bundled only, external only, or an
+  explicit preference order between them.
+- An external runtime is a KMediaBridge-compatible directory with the native
+  bridge, dynamic FFmpeg libraries, and a verified manifest. Arbitrary system
+  libraries are not discovered or trusted implicitly.
 - The native runtime exposes a small versioned C ABI.
 - Desktop JVM calls that ABI through JNA; it never invokes a program.
 - Native libraries are dynamically linked to keep the LGPL replacement and

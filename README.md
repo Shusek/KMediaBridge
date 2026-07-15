@@ -42,6 +42,30 @@ val driver = BundledFfmpegNativeDriver.load()
 val bridge = FfmpegMediaBridge.create(driver)
 ```
 
+Runtime selection is explicit and typed. The separate runtime artifact is the
+deterministic default; applications may instead use a compatible runtime
+installed outside the application or configure a preference order:
+
+```kotlin
+val driver = BundledFfmpegNativeDriver.load(
+    runtimeSelection = FfmpegRuntimeSelection(
+        policy = FfmpegRuntimePolicy.PREFER_EXTERNAL,
+        externalRuntimeDirectory = Path.of("/opt/kmediabridge/ffmpeg-runtime"),
+    ),
+)
+```
+
+Available policies are `BUNDLED_ONLY`, `EXTERNAL_ONLY`, `PREFER_BUNDLED`, and
+`PREFER_EXTERNAL`. Preference fallback occurs only when the preferred source
+has no manifest. A present runtime with a bad hash, ABI, license declaration,
+or build configuration is rejected and never silently bypassed.
+
+An external runtime directory must be a KMediaBridge-compatible dynamic
+library bundle with `manifest.properties`; it is not a system `ffmpeg`
+executable and not an arbitrary set of distro/Homebrew DLLs or dylibs. This
+keeps the no-process API and the same runtime/compliance verification for both
+sources. `driver.runtimeInfo.origin` reports which source was actually chosen.
+
 For a desktop player that consumes HLS, the JVM adapter owns the bounded
 loopback origin as well:
 
@@ -98,7 +122,9 @@ A user may provide rebuilt libraries without changing KMediaBridge:
 
 ```kotlin
 val driver = BundledFfmpegNativeDriver.load(
-    replacementDirectory = Path.of("/path/to/rebuilt/runtime"),
+    runtimeSelection = FfmpegRuntimeSelection.fromExternalDirectory(
+        Path.of("/path/to/rebuilt/runtime"),
+    ),
 )
 ```
 

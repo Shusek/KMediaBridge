@@ -15,6 +15,8 @@ import kotlinx.coroutines.test.runTest
 import java.net.URI
 import java.nio.file.Files
 import java.util.Base64
+import java.util.Comparator
+import java.util.Properties
 import kotlin.io.path.deleteIfExists
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -37,6 +39,7 @@ class BundledFfmpegNativeDriverTest {
                 Files.write(input, Base64.getMimeDecoder().decode(encoded))
                 val driver = BundledFfmpegNativeDriver.load(classLoader = loader)
                 assertEquals("8.1.2", driver.runtimeInfo.ffmpegVersion)
+                assertEquals(FfmpegRuntimeOrigin.BUNDLED, driver.runtimeInfo.origin)
                 assertTrue(driver.runtimeInfo.dynamicLinkingVerified)
 
                 val mediaInput = MediaInput(input.toString(), MediaInputKind.FILE)
@@ -107,6 +110,57 @@ class BundledFfmpegNativeDriverTest {
                 input.deleteIfExists()
             }
         }
+
+    @Test
+    fun loadsTheSameVerifiedRuntimeFromAnExternalDirectory() =
+        runTest {
+            val platform = hostPlatformId() ?: return@runTest
+            val loader = BundledFfmpegNativeDriverTest::class.java.classLoader
+            val resourcePrefix = "META-INF/kmediabridge/native/$platform"
+            if (loader.getResource("$resourcePrefix/manifest.properties") == null) {
+                return@runTest
+            }
+
+            val externalDirectory = Files.createTempDirectory("kmediabridge-external-test-")
+            try {
+                copyPackagedRuntime(loader, resourcePrefix, externalDirectory)
+                val driver =
+                    BundledFfmpegNativeDriver.load(
+                        runtimeSelection = FfmpegRuntimeSelection.fromExternalDirectory(externalDirectory),
+                        classLoader = loader,
+                    )
+
+                assertEquals(FfmpegRuntimeOrigin.EXTERNAL_DIRECTORY, driver.runtimeInfo.origin)
+                assertEquals("8.1.2", driver.runtimeInfo.ffmpegVersion)
+            } finally {
+                Files.walk(externalDirectory).use { paths ->
+                    paths
+                        .sorted(Comparator.reverseOrder())
+                        .forEach(Files::deleteIfExists)
+                }
+            }
+        }
+
+    private fun copyPackagedRuntime(
+        loader: ClassLoader,
+        resourcePrefix: String,
+        destination: java.nio.file.Path,
+    ) {
+        val manifestName = "manifest.properties"
+        val properties =
+            Properties().apply {
+                loader.getResourceAsStream("$resourcePrefix/$manifestName")!!.use(::load)
+            }
+        loader.getResourceAsStream("$resourcePrefix/$manifestName")!!.use { input ->
+            Files.copy(input, destination.resolve(manifestName))
+        }
+        repeat(properties.getProperty("library.count").toInt()) { index ->
+            val name = properties.getProperty("library.$index.name")
+            loader.getResourceAsStream("$resourcePrefix/$name")!!.use { input ->
+                Files.copy(input, destination.resolve(name))
+            }
+        }
+    }
 
     private fun hostPlatformId(): String? {
         val os = System.getProperty("os.name", "").lowercase()
