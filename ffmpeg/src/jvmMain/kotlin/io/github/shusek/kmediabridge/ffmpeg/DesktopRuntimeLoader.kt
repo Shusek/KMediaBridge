@@ -223,7 +223,7 @@ internal object DesktopRuntimeLoader {
                         FfmpegRuntimeOrigin.EXTERNAL_DIRECTORY
                     },
             )
-        FfmpegComplianceVerifier.requireCompliant(runtimeInfo)
+        FfmpegComplianceVerifier.requireAllowedByDistributionPolicy(runtimeInfo)
         return LoadedFfmpegRuntime(api, retained, runtimeInfo)
     }
 
@@ -300,7 +300,7 @@ internal object DesktopRuntimeLoader {
                             "No bundled FFmpeg payload was found for ${platform.id}. Add " +
                                 "io.github.shusek:kmedia-bridge-ffmpeg-runtime-desktop at runtime.",
                         )
-                return stream.use(NativePayloadManifest::read)
+                return stream.use { NativePayloadManifest.read(it, requireDistributionEvidence = true) }
             }
 
             override fun materialize(manifest: NativePayloadManifest): Path {
@@ -344,7 +344,7 @@ internal object DesktopRuntimeLoader {
                             error,
                         )
                     }
-                return stream.use(NativePayloadManifest::read)
+                return stream.use { NativePayloadManifest.read(it, requireDistributionEvidence = false) }
             }
 
             override fun materialize(manifest: NativePayloadManifest): Path = directory
@@ -416,12 +416,29 @@ private data class NativePayloadManifest(
     val libraries: List<NativeLibraryEntry>,
 ) {
     companion object {
-        fun read(stream: InputStream): NativePayloadManifest {
+        fun read(
+            stream: InputStream,
+            requireDistributionEvidence: Boolean,
+        ): NativePayloadManifest {
             val properties = Properties().apply { load(stream) }
 
             fun required(name: String): String =
                 properties.getProperty(name)?.takeIf(String::isNotBlank)
                     ?: DesktopRuntimeLoader.run { reject("The native manifest is missing $name.") }
+
+            fun evidence(name: String): String =
+                if (requireDistributionEvidence) {
+                    required(name)
+                } else {
+                    properties.getProperty(name).orEmpty()
+                }
+
+            fun evidenceBoolean(name: String): Boolean {
+                val value = evidence(name)
+                if (value.isBlank()) return false
+                return value.toBooleanStrictOrNull()
+                    ?: DesktopRuntimeLoader.run { reject("The native manifest has an invalid $name value.") }
+            }
 
             if (required("schemaVersion") != "1") {
                 DesktopRuntimeLoader.run { reject("The native manifest schema is unsupported.") }
@@ -454,12 +471,12 @@ private data class NativePayloadManifest(
                 ffmpegVersion = required("ffmpegVersion"),
                 ffmpegLicenseSpdx = required("ffmpegLicenseSpdx"),
                 ffmpegReportedLicense = required("ffmpegReportedLicense"),
-                sourceOfferUrl = required("sourceOfferUrl"),
-                sourceSha256 = required("sourceSha256"),
-                buildRecipeUrl = required("buildRecipeUrl"),
-                buildRecipeRevision = required("buildRecipeRevision"),
-                exactCorrespondingSourceAvailable = required("exactCorrespondingSourceAvailable").toBooleanStrict(),
-                dynamicLinkingVerified = required("dynamicLinkingVerified").toBooleanStrict(),
+                sourceOfferUrl = evidence("sourceOfferUrl"),
+                sourceSha256 = evidence("sourceSha256"),
+                buildRecipeUrl = evidence("buildRecipeUrl"),
+                buildRecipeRevision = evidence("buildRecipeRevision"),
+                exactCorrespondingSourceAvailable = evidenceBoolean("exactCorrespondingSourceAvailable"),
+                dynamicLinkingVerified = evidenceBoolean("dynamicLinkingVerified"),
                 libraries = libraries,
             )
         }

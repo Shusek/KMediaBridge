@@ -40,6 +40,10 @@ class BundledFfmpegNativeDriverTest {
                 val driver = BundledFfmpegNativeDriver.load(classLoader = loader)
                 assertEquals("8.1.2", driver.runtimeInfo.ffmpegVersion)
                 assertEquals(FfmpegRuntimeOrigin.BUNDLED, driver.runtimeInfo.origin)
+                assertEquals(
+                    FfmpegRuntimeComplianceScope.KMEDIABRIDGE_DISTRIBUTED,
+                    driver.runtimeInfo.complianceScope,
+                )
                 assertTrue(driver.runtimeInfo.dynamicLinkingVerified)
 
                 val mediaInput = MediaInput(input.toString(), MediaInputKind.FILE)
@@ -112,7 +116,7 @@ class BundledFfmpegNativeDriverTest {
         }
 
     @Test
-    fun loadsTheSameVerifiedRuntimeFromAnExternalDirectory() =
+    fun loadsCallerProvidedRuntimeWithoutProjectDistributionEvidence() =
         runTest {
             val platform = hostPlatformId() ?: return@runTest
             val loader = BundledFfmpegNativeDriverTest::class.java.classLoader
@@ -124,6 +128,7 @@ class BundledFfmpegNativeDriverTest {
             val externalDirectory = Files.createTempDirectory("kmediabridge-external-test-")
             try {
                 copyPackagedRuntime(loader, resourcePrefix, externalDirectory)
+                removeProjectDistributionEvidence(externalDirectory.resolve("manifest.properties"))
                 val driver =
                     BundledFfmpegNativeDriver.load(
                         runtimeSelection = FfmpegRuntimeSelection.fromExternalDirectory(externalDirectory),
@@ -131,7 +136,10 @@ class BundledFfmpegNativeDriverTest {
                     )
 
                 assertEquals(FfmpegRuntimeOrigin.EXTERNAL_DIRECTORY, driver.runtimeInfo.origin)
+                assertEquals(FfmpegRuntimeComplianceScope.CALLER_PROVIDED, driver.runtimeInfo.complianceScope)
                 assertEquals("8.1.2", driver.runtimeInfo.ffmpegVersion)
+                assertEquals("", driver.runtimeInfo.ffmpegSourceArchiveUrl)
+                assertEquals(false, driver.runtimeInfo.exactCorrespondingSourceAvailable)
             } finally {
                 Files.walk(externalDirectory).use { paths ->
                     paths
@@ -140,6 +148,22 @@ class BundledFfmpegNativeDriverTest {
                 }
             }
         }
+
+    private fun removeProjectDistributionEvidence(manifest: java.nio.file.Path) {
+        val properties =
+            Properties().apply {
+                Files.newInputStream(manifest).use(::load)
+            }
+        listOf(
+            "sourceOfferUrl",
+            "sourceSha256",
+            "buildRecipeUrl",
+            "buildRecipeRevision",
+            "exactCorrespondingSourceAvailable",
+            "dynamicLinkingVerified",
+        ).forEach(properties::remove)
+        Files.newOutputStream(manifest).use { output -> properties.store(output, null) }
+    }
 
     private fun copyPackagedRuntime(
         loader: ClassLoader,

@@ -42,11 +42,12 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * A desktop JVM driver backed by the optional bundled FFmpeg runtime artifact.
+ * A desktop JVM driver backed by either the optional bundled FFmpeg runtime
+ * artifact or an explicitly selected compatible external runtime.
  *
- * No FFmpeg executable or system installation is used. A replacement directory
- * may be supplied to exercise the dynamic-link replacement rights required by
- * the LGPL. That directory must contain its own `manifest.properties`.
+ * No FFmpeg executable is used. An external directory must contain its own
+ * KMediaBridge native bridge and `manifest.properties`. External runtime
+ * licensing is caller-managed and may differ from the bundled LGPL payload.
  */
 public class BundledFfmpegNativeDriver private constructor(
     private val runtime: LoadedFfmpegRuntime,
@@ -84,7 +85,7 @@ public class BundledFfmpegNativeDriver private constructor(
         return if (reason == null) {
             BridgeSupport.Supported(
                 confidence = 90,
-                reason = "The bundled LGPL FFmpeg runtime can remux this local input without re-encoding video.",
+                reason = "The selected FFmpeg runtime can remux this local input without re-encoding video.",
             )
         } else {
             BridgeSupport.Unsupported(reason)
@@ -144,8 +145,8 @@ public class BundledFfmpegNativeDriver private constructor(
     private fun requireLocalUnencryptedInput(input: MediaInput) {
         val reason =
             when {
-                input.kind != MediaInputKind.FILE -> "The bundled desktop runtime accepts local file inputs only."
-                input.isLive -> "Live inputs are not supported by the bundled desktop runtime."
+                input.kind != MediaInputKind.FILE -> "The selected desktop runtime accepts local file inputs only."
+                input.isLive -> "Live inputs are not supported by the selected desktop runtime."
                 input.isEncrypted -> "Encrypted and DRM-protected inputs are outside this bridge."
                 input.requestHeaders.isNotEmpty() -> "Request headers are only supported for remote inputs."
                 else -> null
@@ -160,18 +161,18 @@ public class BundledFfmpegNativeDriver private constructor(
         request: BridgeRequest,
     ): String? =
         when {
-            input.kind != MediaInputKind.FILE -> "The bundled desktop runtime accepts local file inputs only."
-            input.isLive -> "Live inputs are not supported by the bundled desktop runtime."
+            input.kind != MediaInputKind.FILE -> "The selected desktop runtime accepts local file inputs only."
+            input.isLive -> "Live inputs are not supported by the selected desktop runtime."
             input.isEncrypted -> "Encrypted and DRM-protected inputs are outside this bridge."
             input.requestHeaders.isNotEmpty() -> "Request headers are only supported for remote inputs."
             request.output != BridgeOutput.CMAF_FRAGMENT_STREAM ->
-                "The bundled desktop driver currently emits a CMAF fragment stream."
+                "The selected desktop driver currently emits a CMAF fragment stream."
             request.videoHandling != VideoHandling.COPY ->
-                "The bundled LGPL runtime copies compressed video and does not tone-map it."
+                "The selected runtime copies compressed video and does not tone-map it."
             request.audioHandling !in setOf(AudioHandling.OMIT, AudioHandling.COPY) ->
-                "The bundled LGPL runtime currently copies or omits audio."
+                "The selected runtime currently copies or omits audio."
             request.subtitleHandling != SubtitleHandling.OMIT ->
-                "The bundled LGPL runtime does not burn subtitle tracks into video."
+                "The selected runtime does not burn subtitle tracks into video."
             request.dolbyVisionHandling != DolbyVisionHandling.PRESERVE ->
                 "Dolby Vision conversion requires the separate optional converter module."
             else -> null
@@ -206,8 +207,10 @@ public class BundledFfmpegNativeDriver private constructor(
          * Loads a runtime according to an explicit source policy.
          *
          * Preference policies fall back only when the preferred source has no
-         * manifest. A present but invalid or non-compliant runtime is rejected
-         * instead of being silently bypassed.
+         * manifest. A present but technically invalid runtime is rejected
+         * instead of being silently bypassed. KMediaBridge's LGPL distribution
+         * gate applies to the bundled payload; external licensing is managed by
+         * the caller and reported through [FfmpegRuntimeInfo].
          */
         @JvmStatic
         @JvmOverloads

@@ -57,14 +57,18 @@ val driver = BundledFfmpegNativeDriver.load(
 
 Available policies are `BUNDLED_ONLY`, `EXTERNAL_ONLY`, `PREFER_BUNDLED`, and
 `PREFER_EXTERNAL`. Preference fallback occurs only when the preferred source
-has no manifest. A present runtime with a bad hash, ABI, license declaration,
-or build configuration is rejected and never silently bypassed.
+has no manifest. A present runtime with a bad hash, incompatible ABI, or an
+identity that differs from its manifest is rejected and never silently
+bypassed.
 
 An external runtime directory must be a KMediaBridge-compatible dynamic
 library bundle with `manifest.properties`; it is not a system `ffmpeg`
-executable and not an arbitrary set of distro/Homebrew DLLs or dylibs. This
-keeps the no-process API and the same runtime/compliance verification for both
-sources. `driver.runtimeInfo.origin` reports which source was actually chosen.
+executable and not an arbitrary set of distro/Homebrew DLLs or dylibs. It may,
+however, use a caller-selected FFmpeg build whose effective license is GPL.
+KMediaBridge verifies the bridge ABI, files, hashes, and reported runtime
+identity, but it does not certify a caller-provided payload for redistribution.
+`driver.runtimeInfo.origin`, `complianceScope`, `ffmpegLicenseSpdx`, and
+`configureArguments` report what was actually selected.
 
 For a desktop player that consumes HLS, the JVM adapter owns the bounded
 loopback origin as well:
@@ -110,13 +114,14 @@ confirms the actual AVFoundation/Media Foundation/GStreamer/rendering path
 after receiving the fMP4 stream. Android and Apple Kotlin/Native payloads
 remain separate future artifacts; the bundled 0.3.0 runtime is for desktop JVM.
 
-## LGPL and replacement
+## LGPL distribution and external runtimes
 
-KMediaBridge and the selected FFmpeg build are LGPL-2.1-or-later. Native
-libraries are dynamically linked and never committed to Git; release CI builds
-them from the exact pinned source. Each stable release publishes the matching
-source archive, recipes, configure lines, compiler identity, native hashes,
-SBOM, platform bundles, and relinking instructions beside the Maven artifact.
+KMediaBridge and the FFmpeg payload conveyed by its runtime artifact are
+LGPL-2.1-or-later. Native libraries are dynamically linked and never committed
+to Git; release CI builds them from the exact pinned source. Each stable release
+publishes the matching source archive, recipes, configure lines, compiler
+identity, native hashes, SBOM, platform bundles, and relinking instructions
+beside the Maven artifact.
 
 A user may provide rebuilt libraries without changing KMediaBridge:
 
@@ -128,8 +133,12 @@ val driver = BundledFfmpegNativeDriver.load(
 )
 ```
 
-The replacement directory supplies its own `manifest.properties`; the same
-fail-closed runtime checks apply. See [Compliance](docs/COMPLIANCE.md),
+The external directory supplies its own `manifest.properties`. Technical checks
+remain fail-closed, but the KMediaBridge LGPL publication gate does not reject a
+GPL runtime that the caller supplied and KMediaBridge did not convey. Such a
+runtime has `complianceScope == CALLER_PROVIDED`; the application author or
+operator is responsible for determining whether and how the resulting
+combination may be distributed. See [Compliance](docs/COMPLIANCE.md),
 [Relinking](docs/RELINKING.md), and [Architecture](docs/ARCHITECTURE.md).
 
 Run the complete source and publication gate with:

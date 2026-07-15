@@ -139,6 +139,20 @@ public object FfmpegComplianceVerifier {
         }
     }
 
+    /**
+     * Applies KMediaBridge's LGPL redistribution gate only to a native payload
+     * conveyed by KMediaBridge. A caller-provided runtime is still expected to
+     * pass the loader's ABI, identity, path, and hash checks, but its effective
+     * license and any resulting application obligations belong to the caller.
+     * Call [verify] explicitly when an application wants to require the same
+     * LGPL-only policy for an external runtime.
+     */
+    public fun requireAllowedByDistributionPolicy(runtime: FfmpegRuntimeInfo) {
+        if (runtime.complianceScope == FfmpegRuntimeComplianceScope.KMEDIABRIDGE_DISTRIBUTED) {
+            requireCompliant(runtime)
+        }
+    }
+
     private fun requireHttps(
         code: String,
         value: String,

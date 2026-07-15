@@ -202,7 +202,7 @@ internal class BoundedCmafHlsOrigin(
         } catch (error: Throwable) {
             throw MediaBridgeException(
                 MediaBridgeErrorCode.CONVERSION_FAILED,
-                "The bundled FFmpeg bridge did not produce a playable CMAF stream.",
+                "The selected FFmpeg bridge did not produce a playable CMAF stream.",
                 error,
             )
         }
@@ -240,7 +240,7 @@ internal class BoundedCmafHlsOrigin(
                     ready.completeExceptionally(
                         MediaBridgeException(
                             MediaBridgeErrorCode.CONVERSION_FAILED,
-                            "The bundled FFmpeg bridge reached end of stream before producing playable CMAF.",
+                            "The selected FFmpeg bridge reached end of stream before producing playable CMAF.",
                         ),
                     )
                 }
@@ -337,7 +337,7 @@ internal class BoundedCmafHlsOrigin(
         if (snapshot.isEmpty() && failed != null) {
             throw MediaBridgeException(
                 MediaBridgeErrorCode.CONVERSION_FAILED,
-                "The bundled FFmpeg bridge stopped before producing media fragments.",
+                "The selected FFmpeg bridge stopped before producing media fragments.",
                 failed,
             )
         }

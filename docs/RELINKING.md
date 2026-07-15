@@ -17,8 +17,9 @@ inventory before replacing any file.
 A compatible replacement must retain C ABI version 3 and the platform library
 names. Replace `libavformat`, `libavcodec`, and `libavutil` together, then
 rebuild `libkmediabridge` against those exact headers. Run
-`scripts/inspect_native_runtime.py` again; a GPL/nonfree, statically linked, or
-otherwise undocumented runtime is rejected.
+`scripts/inspect_native_runtime.py` again when preparing an LGPL payload for
+redistribution by KMediaBridge; that publication path rejects GPL/nonfree,
+statically linked, or otherwise undocumented builds.
 
 Platform signing and packaging happen after this reproducible build step.
 Redistributors must provide a practical replacement/relinking route appropriate
@@ -33,9 +34,17 @@ BundledFfmpegNativeDriver.load(
 )
 ```
 
-The manifest lists every library name/hash, ABI, reported FFmpeg identity,
-source offer, and immutable recipe revision. The loader verifies the replacement
-directory rather than comparing it to hashes from the official bundle.
+The manifest always lists every library name/hash, ABI, and reported FFmpeg
+identity. Source-offer and immutable-recipe evidence are mandatory for a
+KMediaBridge-distributed payload and optional for a caller-provided external
+runtime. The loader verifies the external directory rather than comparing it to
+hashes from the official bundle.
 `PREFER_EXTERNAL` and `PREFER_BUNDLED` provide a controlled fallback order,
 but a present manifest that fails validation always stops loading instead of
 silently selecting the other source.
+
+An external runtime may report GPL rather than LGPL. In that case the loader
+accepts it as `CALLER_PROVIDED` after technical verification and exposes its
+reported license/configuration in `FfmpegRuntimeInfo`. This only separates it
+from KMediaBridge's publication compliance gate; it does not grant permission
+to distribute an application combined with that runtime.

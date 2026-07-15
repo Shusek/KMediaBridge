@@ -31,6 +31,41 @@ class FfmpegComplianceVerifierTest {
     }
 
     @Test
+    fun allowsCallerProvidedGplRuntimeWithoutCertifyingItAsLgplRedistributable() {
+        val runtime =
+            compliantRuntime().copy(
+                ffmpegLicenseSpdx = "GPL-2.0-or-later",
+                ffmpegReportedLicense = "GPL version 2 or later",
+                configureArguments =
+                    COMPLIANT_ARGUMENTS
+                        .filterNot { it == "--disable-gpl" }
+                        .plus("--enable-gpl"),
+                exactCorrespondingSourceAvailable = false,
+                origin = FfmpegRuntimeOrigin.EXTERNAL_DIRECTORY,
+            )
+
+        val report = FfmpegComplianceVerifier.verify(runtime)
+        assertTrue(report.violations.any { it.code == "FFMPEG_LICENSE" })
+        assertEquals(FfmpegRuntimeComplianceScope.CALLER_PROVIDED, runtime.complianceScope)
+
+        FfmpegComplianceVerifier.requireAllowedByDistributionPolicy(runtime)
+    }
+
+    @Test
+    fun stillRejectsTheSameGplRuntimeWhenKMediaBridgeWouldDistributeIt() {
+        val runtime =
+            compliantRuntime().copy(
+                ffmpegLicenseSpdx = "GPL-2.0-or-later",
+                ffmpegReportedLicense = "GPL version 2 or later",
+                configureArguments = COMPLIANT_ARGUMENTS + "--enable-gpl",
+            )
+
+        assertFailsWith<MediaBridgeException> {
+            FfmpegComplianceVerifier.requireAllowedByDistributionPolicy(runtime)
+        }
+    }
+
+    @Test
     fun rejectsMissingCorrespondingSource() {
         val report =
             FfmpegComplianceVerifier.verify(

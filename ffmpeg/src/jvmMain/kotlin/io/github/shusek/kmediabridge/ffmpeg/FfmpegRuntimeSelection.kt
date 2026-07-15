@@ -9,9 +9,13 @@ import java.nio.file.Path
  * compatible runtime installed outside the application.
  *
  * An external directory is not an FFmpeg executable or an arbitrary directory
- * of distribution libraries. It must contain the KMediaBridge native bridge,
- * its dynamically linked FFmpeg libraries, and a verifiable
- * `manifest.properties` produced by the KMediaBridge packaging tools.
+ * of distribution libraries. It must contain a compatible KMediaBridge native
+ * bridge, its FFmpeg libraries, and a verifiable `manifest.properties`.
+ *
+ * KMediaBridge does not convey an external payload, so it may report an
+ * effective license other than LGPL, including GPL. Its licensing and any
+ * obligations created by linking it into an application are managed by the
+ * caller. Technical ABI, identity, path, and hash checks are never disabled.
  */
 public enum class FfmpegRuntimePolicy {
     BUNDLED_ONLY,

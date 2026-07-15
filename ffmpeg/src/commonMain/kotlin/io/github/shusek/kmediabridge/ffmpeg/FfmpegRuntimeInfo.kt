@@ -12,8 +12,17 @@ public data class NativeComponentInfo(
 
 /** Identifies where the verified native FFmpeg runtime was loaded from. */
 public enum class FfmpegRuntimeOrigin {
+    /** Native payload conveyed by the KMediaBridge runtime artifact. */
     BUNDLED,
+
+    /** Native payload explicitly supplied by the application or its operator. */
     EXTERNAL_DIRECTORY,
+}
+
+/** Identifies who is responsible for the selected native payload's distribution compliance. */
+public enum class FfmpegRuntimeComplianceScope {
+    KMEDIABRIDGE_DISTRIBUTED,
+    CALLER_PROVIDED,
 }
 
 public data class FfmpegRuntimeInfo(
@@ -30,7 +39,19 @@ public data class FfmpegRuntimeInfo(
     public val dynamicLinkingVerified: Boolean,
     public val linkedComponents: List<NativeComponentInfo> = emptyList(),
     public val origin: FfmpegRuntimeOrigin = FfmpegRuntimeOrigin.BUNDLED,
-)
+) {
+    /**
+     * Bundled payloads are covered by KMediaBridge's fail-closed LGPL release
+     * policy. External payloads may use another effective license, including
+     * GPL, and remain the caller's distribution responsibility.
+     */
+    public val complianceScope: FfmpegRuntimeComplianceScope
+        get() =
+            when (origin) {
+                FfmpegRuntimeOrigin.BUNDLED -> FfmpegRuntimeComplianceScope.KMEDIABRIDGE_DISTRIBUTED
+                FfmpegRuntimeOrigin.EXTERNAL_DIRECTORY -> FfmpegRuntimeComplianceScope.CALLER_PROVIDED
+            }
+}
 
 public data class ComplianceViolation(
     public val code: String,

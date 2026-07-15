@@ -36,7 +36,7 @@ public interface FfmpegNativeDriver {
 public class FfmpegMediaBridge private constructor(
     private val driver: FfmpegNativeDriver,
 ) : MediaBridge {
-    override val id: String = "ffmpeg-lgpl"
+    override val id: String = "ffmpeg"
     override val capabilities: BridgeCapabilities = driver.capabilities
 
     override suspend fun probe(input: MediaInput): MediaProbe = driver.probe(input)
@@ -48,7 +48,7 @@ public class FfmpegMediaBridge private constructor(
 
     public companion object {
         public fun create(driver: FfmpegNativeDriver): FfmpegMediaBridge {
-            FfmpegComplianceVerifier.requireCompliant(driver.runtimeInfo)
+            FfmpegComplianceVerifier.requireAllowedByDistributionPolicy(driver.runtimeInfo)
             return FfmpegMediaBridge(driver)
         }
     }
@@ -58,10 +58,10 @@ public class FfmpegMediaBridgeProvider(
     private val driver: FfmpegNativeDriver,
     override val priority: Int = 50,
 ) : MediaBridgeProvider {
-    override val id: String = "ffmpeg-lgpl"
+    override val id: String = "ffmpeg"
 
     init {
-        FfmpegComplianceVerifier.requireCompliant(driver.runtimeInfo)
+        FfmpegComplianceVerifier.requireAllowedByDistributionPolicy(driver.runtimeInfo)
     }
 
     override suspend fun evaluate(
