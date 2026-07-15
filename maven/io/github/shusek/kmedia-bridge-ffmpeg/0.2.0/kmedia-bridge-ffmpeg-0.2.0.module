@@ -1,0 +1,535 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "io.github.shusek",
+    "module": "kmedia-bridge-ffmpeg",
+    "version": "0.2.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.6.1"
+    }
+  },
+  "variants": [
+    {
+      "name": "metadataApiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "dependencies": [
+        {
+          "group": "io.github.shusek",
+          "module": "kmedia-bridge-api",
+          "version": {
+            "requires": "0.2.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "ffmpeg-metadata-0.2.0.jar",
+          "url": "kmedia-bridge-ffmpeg-0.2.0.jar",
+          "size": 4857,
+          "sha512": "6d80ce4491bc0bcb7fd991d9ecf8e3302d5e215b4cdaeb0ce32cabd1c27bb277f8070cad1f145994c6e88853faac9c648cc7918b8cd4859055653cb71441bb1c",
+          "sha256": "0ae77f0b0ba46f423ec107cf6b780268a0d6d14718eeca58991ed3d34147b05f",
+          "sha1": "6d73f3272a30695c5a1a07c70cdfeadd2e114090",
+          "md5": "78f1b616bd09a5b64f7f0157db2982ee"
+        }
+      ]
+    },
+    {
+      "name": "metadataSourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "files": [
+        {
+          "name": "ffmpeg-kotlin-0.2.0-sources.jar",
+          "url": "kmedia-bridge-ffmpeg-0.2.0-sources.jar",
+          "size": 4565,
+          "sha512": "8511876b04ef7c0b298058fb9c805a19e9e982afb66836178caaf0b0e2ded2aa2d61274b4fba22eab23634cf78e859b25869c464a4efe4f1514178cc14a19601",
+          "sha256": "4f8c2d18d6f27e16f57124b5056670819545d1340b7de31c9ad5f367ef33cf9d",
+          "sha1": "8ae7ee13937f6d3519849b1b61aef0ae5c8eceed",
+          "md5": "84b855ec3ae4794e9ecc9ea55a8df10b"
+        }
+      ]
+    },
+    {
+      "name": "androidApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-android/0.2.0/kmedia-bridge-ffmpeg-android-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-android",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "androidRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-android/0.2.0/kmedia-bridge-ffmpeg-android-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-android",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "androidSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-android/0.2.0/kmedia-bridge-ffmpeg-android-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-android",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "iosArm64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "ios_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-iosarm64/0.2.0/kmedia-bridge-ffmpeg-iosarm64-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-iosarm64",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "iosArm64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "ios_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-iosarm64/0.2.0/kmedia-bridge-ffmpeg-iosarm64-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-iosarm64",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "iosArm64MetadataElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.native.target": "ios_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-iosarm64/0.2.0/kmedia-bridge-ffmpeg-iosarm64-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-iosarm64",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "iosSimulatorArm64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "ios_simulator_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-iossimulatorarm64/0.2.0/kmedia-bridge-ffmpeg-iossimulatorarm64-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-iossimulatorarm64",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "iosSimulatorArm64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "ios_simulator_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-iossimulatorarm64/0.2.0/kmedia-bridge-ffmpeg-iossimulatorarm64-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-iossimulatorarm64",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "iosSimulatorArm64MetadataElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.native.target": "ios_simulator_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-iossimulatorarm64/0.2.0/kmedia-bridge-ffmpeg-iossimulatorarm64-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-iossimulatorarm64",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-jvm/0.2.0/kmedia-bridge-ffmpeg-jvm-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-jvm",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-jvm/0.2.0/kmedia-bridge-ffmpeg-jvm-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-jvm",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-jvm/0.2.0/kmedia-bridge-ffmpeg-jvm-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-jvm",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "linuxArm64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "linux_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-linuxarm64/0.2.0/kmedia-bridge-ffmpeg-linuxarm64-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-linuxarm64",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "linuxArm64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "linux_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-linuxarm64/0.2.0/kmedia-bridge-ffmpeg-linuxarm64-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-linuxarm64",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "linuxX64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "linux_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-linuxx64/0.2.0/kmedia-bridge-ffmpeg-linuxx64-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-linuxx64",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "linuxX64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "linux_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-linuxx64/0.2.0/kmedia-bridge-ffmpeg-linuxx64-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-linuxx64",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "macosArm64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "macos_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-macosarm64/0.2.0/kmedia-bridge-ffmpeg-macosarm64-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-macosarm64",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "macosArm64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "macos_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-macosarm64/0.2.0/kmedia-bridge-ffmpeg-macosarm64-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-macosarm64",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "macosArm64MetadataElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.native.target": "macos_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-macosarm64/0.2.0/kmedia-bridge-ffmpeg-macosarm64-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-macosarm64",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "macosX64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "macos_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-macosx64/0.2.0/kmedia-bridge-ffmpeg-macosx64-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-macosx64",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "macosX64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "macos_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-macosx64/0.2.0/kmedia-bridge-ffmpeg-macosx64-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-macosx64",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "macosX64MetadataElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.native.target": "macos_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-macosx64/0.2.0/kmedia-bridge-ffmpeg-macosx64-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-macosx64",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "mingwX64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "mingw_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-mingwx64/0.2.0/kmedia-bridge-ffmpeg-mingwx64-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-mingwx64",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "mingwX64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "mingw_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-mingwx64/0.2.0/kmedia-bridge-ffmpeg-mingwx64-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-mingwx64",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "wasmJsApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-wasm-js/0.2.0/kmedia-bridge-ffmpeg-wasm-js-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-wasm-js",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "wasmJsRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-wasm-js/0.2.0/kmedia-bridge-ffmpeg-wasm-js-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-wasm-js",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "wasmJsSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-ffmpeg-wasm-js/0.2.0/kmedia-bridge-ffmpeg-wasm-js-0.2.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-ffmpeg-wasm-js",
+        "version": "0.2.0"
+      }
+    }
+  ]
+}

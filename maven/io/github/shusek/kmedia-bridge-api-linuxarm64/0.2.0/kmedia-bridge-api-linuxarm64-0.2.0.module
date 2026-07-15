@@ -1,0 +1,79 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../kmedia-bridge-api/0.2.0/kmedia-bridge-api-0.2.0.module",
+    "group": "io.github.shusek",
+    "module": "kmedia-bridge-api",
+    "version": "0.2.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.6.1"
+    }
+  },
+  "variants": [
+    {
+      "name": "linuxArm64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "linux_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "api-linuxArm64Main-0.2.0.klib",
+          "url": "kmedia-bridge-api-linuxarm64-0.2.0.klib",
+          "size": 43131,
+          "sha512": "d8983fd31451bd795c57423c5544bff55ce38518accf4e328c68f1da404eda051f04a7b48bc5bda2087cdc95da1e0cdd8b4f234689ba9b6859cfb5fb0fd1a5c6",
+          "sha256": "dc926de88bd90c29fb17cb9b4ed6787ba68ccabc294f5b2015d94c55842c90da",
+          "sha1": "4b33c5e14ae6eee6f74e9977af6508793b65a49a",
+          "md5": "d0da624794c6020e091e7991fd46db1b"
+        }
+      ]
+    },
+    {
+      "name": "linuxArm64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "linux_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "files": [
+        {
+          "name": "api-linuxarm64-0.2.0-sources.jar",
+          "url": "kmedia-bridge-api-linuxarm64-0.2.0-sources.jar",
+          "size": 3992,
+          "sha512": "530501b265594bdc79ab3001505879f574b5f88d1251c56f51b529853419b27a8fcb0a9ba44ec72b3ade33a3f820e2f1ed18ad6c6e9bd0e2f5fdee8756f313e3",
+          "sha256": "37dc5909d9cab42d9ee8ce058a29533fa32ad5f9afea2112e9a4b75f17d0cdd5",
+          "sha1": "65c83861fc0928ff36db1f11daf43e3ef160c47a",
+          "md5": "d812297bc13b5e1982cc2bfe5f739e12"
+        }
+      ]
+    }
+  ]
+}

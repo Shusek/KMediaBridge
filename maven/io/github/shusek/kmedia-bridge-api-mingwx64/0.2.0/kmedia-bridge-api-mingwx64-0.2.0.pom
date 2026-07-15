@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <!-- This module was also published with a richer model, Gradle metadata,  -->
+  <!-- which should be used instead. Do not delete the following line which  -->
+  <!-- is to indicate to Gradle or any Gradle module metadata file consumer  -->
+  <!-- that they should prefer consuming it instead. -->
+  <!-- do_not_remove: published-with-gradle-metadata -->
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>io.github.shusek</groupId>
+  <artifactId>kmedia-bridge-api-mingwx64</artifactId>
+  <version>0.2.0</version>
+  <packaging>klib</packaging>
+  <name>KMediaBridge API</name>
+  <description>Engine-neutral Kotlin Multiplatform contracts for media probing and container bridging.</description>
+  <url>https://github.com/Shusek/KMediaBridge</url>
+  <inceptionYear>2026</inceptionYear>
+  <licenses>
+    <license>
+      <name>GNU Lesser General Public License v2.1 or later</name>
+      <url>https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+  <developers>
+    <developer>
+      <id>Shusek</id>
+      <name>Shusek</name>
+    </developer>
+  </developers>
+  <scm>
+    <connection>scm:git:https://github.com/Shusek/KMediaBridge.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com/Shusek/KMediaBridge.git</developerConnection>
+    <url>https://github.com/Shusek/KMediaBridge</url>
+  </scm>
+  <dependencies>
+    <dependency>
+      <groupId>org.jetbrains.kotlinx</groupId>
+      <artifactId>kotlinx-coroutines-core-mingwx64</artifactId>
+      <version>1.11.0</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.jetbrains.kotlin</groupId>
+      <artifactId>kotlin-stdlib</artifactId>
+      <version>2.4.0</version>
+      <scope>compile</scope>
+    </dependency>
+  </dependencies>
+</project>
