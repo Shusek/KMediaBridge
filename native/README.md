@@ -14,6 +14,6 @@ Generated native directories are intentionally ignored. Release CI transforms
 each inspected result into a classpath payload, embeds per-platform and
 aggregate manifests, and publishes binaries only from an immutable tag.
 
-ABI 2 supports probing and lossless fragmented-MP4 remuxing to a path or a
-backpressured callback. It does not decode, tone-map, or encode video and
-therefore does not require x264 or x265.
+ABI 3 supports probing audio/video/subtitle tracks and lossless, selected-track
+fragmented-MP4 remuxing to a path or a backpressured callback. It does not
+decode, tone-map, or encode video and therefore does not require x264 or x265.

@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define KMB_ABI_VERSION 2
+#define KMB_ABI_VERSION 3
 
 typedef enum KmbResult {
     KMB_OK = 0,
@@ -60,6 +60,8 @@ KMB_EXPORT KmbResult kmb_remux_fragmented_mp4_stream(
     const char *input_locator,
     int64_t fragment_duration_us,
     int64_t start_time_us,
+    int32_t preferred_video_track_id,
+    int32_t preferred_audio_track_id,
     KmbWriteCallback write_callback,
     void *opaque,
     char **output_error

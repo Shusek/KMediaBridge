@@ -6,7 +6,7 @@
 3. Merge only after CI builds and inspects Linux x64, macOS arm64/x64, and
    Windows x64. Runnable desktop hosts must also load, probe, and stream the
    packaged runtime through the JVM API.
-4. Create an immutable stable tag such as `v0.2.0`.
+4. Create an immutable stable tag such as `v0.3.0`.
 5. Tag CI rebuilds every native payload, embeds per-platform manifests, merges
    the aggregate binary manifest, reruns publication verification, and then
    publishes all three Maven artifacts to the version-preserving `gh-pages`

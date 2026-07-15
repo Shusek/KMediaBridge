@@ -3,17 +3,21 @@
 package io.github.shusek.kmediabridge.ffmpeg
 
 import io.github.shusek.kmediabridge.AudioTrackInfo
+import io.github.shusek.kmediabridge.Chromaticity
 import io.github.shusek.kmediabridge.ColorMatrix
 import io.github.shusek.kmediabridge.ColorPrimaries
 import io.github.shusek.kmediabridge.ColorRange
 import io.github.shusek.kmediabridge.ColorTransfer
+import io.github.shusek.kmediabridge.ContentLightLevelInfo
 import io.github.shusek.kmediabridge.DolbyVisionInfo
 import io.github.shusek.kmediabridge.DynamicRangeFormat
+import io.github.shusek.kmediabridge.MasteringDisplayInfo
 import io.github.shusek.kmediabridge.MediaBridgeErrorCode
 import io.github.shusek.kmediabridge.MediaBridgeException
 import io.github.shusek.kmediabridge.MediaContainer
 import io.github.shusek.kmediabridge.MediaProbe
 import io.github.shusek.kmediabridge.MediaTrackInfo
+import io.github.shusek.kmediabridge.SubtitleTrackInfo
 import io.github.shusek.kmediabridge.VideoCodec
 import io.github.shusek.kmediabridge.VideoColorInfo
 import io.github.shusek.kmediabridge.VideoTrackInfo
@@ -23,6 +27,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -61,6 +66,18 @@ internal object NativeProbeParser {
                     codecName = track.string("codec"),
                     channels = track.optionalPositiveInt("channels"),
                     sampleRateHz = track.optionalPositiveInt("sampleRateHz"),
+                    bitrate = track.optionalPositiveInt("bitrate"),
+                    title = track.optionalString("title"),
+                    isDefault = track.boolean("isDefault"),
+                )
+            "subtitle" ->
+                SubtitleTrackInfo(
+                    id = track.int("id"),
+                    language = track.optionalString("language"),
+                    codecName = track.string("codec"),
+                    isImageBased = track.boolean("isImageBased"),
+                    title = track.optionalString("title"),
+                    isDefault = track.boolean("isDefault"),
                 )
             else -> null
         }
@@ -106,9 +123,31 @@ internal object NativeProbeParser {
                     primaries = parsePrimaries(track.optionalString("colorPrimaries")),
                     transfer = parseTransfer(track.optionalString("colorTransfer")),
                     matrix = parseMatrix(track.optionalString("colorMatrix")),
+                    masteringDisplay = parseMasteringDisplay(track),
+                    contentLightLevel = parseContentLightLevel(track),
                     hasHdr10PlusMetadata = track.boolean("hasHdr10PlusMetadata"),
                     dolbyVision = dolbyVision,
                 ),
+        )
+    }
+
+    private fun parseMasteringDisplay(track: JsonObject): MasteringDisplayInfo? {
+        val value = track["masteringDisplay"]?.takeUnless { it is JsonNull }?.jsonObject ?: return null
+        return MasteringDisplayInfo(
+            red = Chromaticity(value.double("redX"), value.double("redY")),
+            green = Chromaticity(value.double("greenX"), value.double("greenY")),
+            blue = Chromaticity(value.double("blueX"), value.double("blueY")),
+            whitePoint = Chromaticity(value.double("whiteX"), value.double("whiteY")),
+            minimumLuminanceNits = value.double("minimumLuminanceNits"),
+            maximumLuminanceNits = value.double("maximumLuminanceNits"),
+        )
+    }
+
+    private fun parseContentLightLevel(track: JsonObject): ContentLightLevelInfo? {
+        val value = track["contentLightLevel"]?.takeUnless { it is JsonNull }?.jsonObject ?: return null
+        return ContentLightLevelInfo(
+            maximumContentLightLevelNits = value.int("maximumContentLightLevelNits"),
+            maximumFrameAverageLightLevelNits = value.int("maximumFrameAverageLightLevelNits"),
         )
     }
 
@@ -175,22 +214,33 @@ internal object NativeProbeParser {
 
     private fun JsonObject.string(name: String): String = getValue(name).jsonPrimitive.content
 
-    private fun JsonObject.optionalString(name: String): String? =
-        get(name)?.takeUnless { it is JsonNull }?.jsonPrimitive?.contentOrNull
+    private fun JsonObject.optionalString(name: String): String? = get(name)?.takeUnless { it is JsonNull }?.jsonPrimitive?.contentOrNull
 
     private fun JsonObject.int(name: String): Int =
         getValue(name).jsonPrimitive.intOrNull
             ?: throw IllegalArgumentException("The typed probe field $name is not an integer.")
 
-    private fun JsonObject.boolean(name: String): Boolean =
-        get(name)?.takeUnless { it is JsonNull }?.jsonPrimitive?.booleanOrNull ?: false
+    private fun JsonObject.double(name: String): Double =
+        getValue(name)
+            .jsonPrimitive.doubleOrNull
+            ?.takeIf(Double::isFinite)
+            ?: throw IllegalArgumentException("The typed probe field $name is not a finite number.")
+
+    private fun JsonObject.boolean(name: String): Boolean = get(name)?.takeUnless { it is JsonNull }?.jsonPrimitive?.booleanOrNull ?: false
 
     private fun JsonObject.optionalPositiveInt(name: String): Int? =
-        get(name)?.takeUnless { it is JsonNull }?.jsonPrimitive?.intOrNull?.takeIf { it > 0 }
+        get(name)
+            ?.takeUnless { it is JsonNull }
+            ?.jsonPrimitive
+            ?.intOrNull
+            ?.takeIf { it > 0 }
 
     private fun JsonObject.optionalNonNegativeInt(name: String): Int? =
-        get(name)?.takeUnless { it is JsonNull }?.jsonPrimitive?.intOrNull?.takeIf { it >= 0 }
+        get(name)
+            ?.takeUnless { it is JsonNull }
+            ?.jsonPrimitive
+            ?.intOrNull
+            ?.takeIf { it >= 0 }
 
-    private fun JsonObject.nullableLong(name: String): Long? =
-        get(name)?.takeUnless { it is JsonNull }?.jsonPrimitive?.longOrNull
+    private fun JsonObject.nullableLong(name: String): Long? = get(name)?.takeUnless { it is JsonNull }?.jsonPrimitive?.longOrNull
 }

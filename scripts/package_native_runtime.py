@@ -72,8 +72,8 @@ def main() -> int:
 
     dist = arguments.dist.resolve()
     inspection = json.loads((dist / "compliance/runtime-inspection.json").read_text(encoding="utf-8"))
-    if inspection.get("abiVersion") != 2:
-        raise ValueError("Only native ABI 2 may be packaged")
+    if inspection.get("abiVersion") != 3:
+        raise ValueError("Only native ABI 3 may be packaged")
     if not inspection.get("dynamicLinkingVerified") or not inspection.get("replaceableLoaderPathVerified"):
         raise ValueError("The native runtime did not pass the replaceable dynamic-link inspection")
     if "LGPL" not in str(inspection.get("ffmpegReportedLicense", "")).upper():

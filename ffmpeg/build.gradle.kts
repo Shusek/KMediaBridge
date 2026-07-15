@@ -8,6 +8,7 @@ plugins {
     alias(libs.plugins.android.multiplatform.library)
     alias(libs.plugins.vanniktech.maven.publish)
     alias(libs.plugins.dokka)
+    alias(libs.plugins.ktlint)
 }
 
 kotlin {
@@ -73,7 +74,12 @@ publishing {
     repositories {
         maven {
             name = "compliance"
-            url = rootProject.layout.buildDirectory.dir("compliance-repository").get().asFile.toURI()
+            url =
+                rootProject.layout.buildDirectory
+                    .dir("compliance-repository")
+                    .get()
+                    .asFile
+                    .toURI()
         }
         rootProject.providers.gradleProperty("githubPagesMavenRepository").orNull?.let { repositoryPath ->
             maven {

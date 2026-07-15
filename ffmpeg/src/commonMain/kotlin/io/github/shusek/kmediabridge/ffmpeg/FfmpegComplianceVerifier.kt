@@ -125,7 +125,7 @@ public object FfmpegComplianceVerifier {
         return FfmpegComplianceReport(violations)
     }
 
-    public fun requireCompliant(runtime: FfmpegRuntimeInfo): Unit {
+    public fun requireCompliant(runtime: FfmpegRuntimeInfo) {
         val report = verify(runtime)
         if (!report.isCompliant) {
             throw MediaBridgeException(

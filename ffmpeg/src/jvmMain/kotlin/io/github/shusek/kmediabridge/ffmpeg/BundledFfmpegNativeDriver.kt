@@ -2,6 +2,8 @@
 
 package io.github.shusek.kmediabridge.ffmpeg
 
+import io.github.shusek.kmediabridge.AudioHandling
+import io.github.shusek.kmediabridge.AudioTrackInfo
 import io.github.shusek.kmediabridge.BridgeCapabilities
 import io.github.shusek.kmediabridge.BridgeOutput
 import io.github.shusek.kmediabridge.BridgeRequest
@@ -14,11 +16,11 @@ import io.github.shusek.kmediabridge.MediaBridgeSession
 import io.github.shusek.kmediabridge.MediaContainer
 import io.github.shusek.kmediabridge.MediaInput
 import io.github.shusek.kmediabridge.MediaInputKind
+import io.github.shusek.kmediabridge.MediaOutputInfo
 import io.github.shusek.kmediabridge.MediaProbe
+import io.github.shusek.kmediabridge.SubtitleHandling
 import io.github.shusek.kmediabridge.VideoHandling
-import java.nio.file.Path
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicReference
+import io.github.shusek.kmediabridge.VideoTrackInfo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -35,6 +37,9 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * A desktop JVM driver backed by the optional bundled FFmpeg runtime artifact.
@@ -65,6 +70,10 @@ public class BundledFfmpegNativeDriver private constructor(
             canConvertDolbyVisionProfile7 = false,
             supportsLiveInput = false,
             supportsEncryptedInput = false,
+            supportsRemoteInput = false,
+            canTranscodeVideo = false,
+            canTranscodeAudio = false,
+            canBurnSubtitles = false,
         )
 
     override suspend fun evaluate(
@@ -95,7 +104,41 @@ public class BundledFfmpegNativeDriver private constructor(
         unsupportedReason(input, request)?.let { reason ->
             throw MediaBridgeException(MediaBridgeErrorCode.UNSUPPORTED_REQUEST, reason)
         }
-        return DesktopFfmpegSession(runtime, input, request)
+        val probe = probe(input)
+        val videoTracks = probe.tracks.filterIsInstance<VideoTrackInfo>()
+        val audioTracks = probe.tracks.filterIsInstance<AudioTrackInfo>()
+        val videoTrack =
+            request.preferredVideoTrackId
+                ?.let { requested -> videoTracks.firstOrNull { it.id == requested } }
+                ?: videoTracks.firstOrNull()
+                ?: throw MediaBridgeException(MediaBridgeErrorCode.UNSUPPORTED_INPUT, "No video track is available.")
+        val audioTrack =
+            if (request.audioHandling == AudioHandling.OMIT) {
+                null
+            } else {
+                request.preferredAudioTrackId
+                    ?.let { requested -> audioTracks.firstOrNull { it.id == requested } }
+                    ?: audioTracks.firstOrNull(AudioTrackInfo::isDefault)
+                    ?: audioTracks.firstOrNull()
+            }
+        if (request.preferredVideoTrackId != null && videoTrack.id != request.preferredVideoTrackId) {
+            throw MediaBridgeException(MediaBridgeErrorCode.UNSUPPORTED_REQUEST, "The requested video track is unavailable.")
+        }
+        if (request.preferredAudioTrackId != null && audioTrack?.id != request.preferredAudioTrackId) {
+            throw MediaBridgeException(MediaBridgeErrorCode.UNSUPPORTED_REQUEST, "The requested audio track is unavailable.")
+        }
+        val outputInfo =
+            MediaOutputInfo(
+                videoHandling = request.videoHandling,
+                audioHandling = request.audioHandling,
+                subtitleHandling = request.subtitleHandling,
+                selectedVideoTrackId = videoTrack.id,
+                selectedAudioTrackId = audioTrack?.id,
+                selectedSubtitleTrackId = null,
+                inputColorInfo = videoTrack.colorInfo,
+                outputColorInfo = videoTrack.colorInfo,
+            )
+        return DesktopFfmpegSession(runtime, input, request, outputInfo)
     }
 
     private fun requireLocalUnencryptedInput(input: MediaInput) {
@@ -104,6 +147,7 @@ public class BundledFfmpegNativeDriver private constructor(
                 input.kind != MediaInputKind.FILE -> "The bundled desktop runtime accepts local file inputs only."
                 input.isLive -> "Live inputs are not supported by the bundled desktop runtime."
                 input.isEncrypted -> "Encrypted and DRM-protected inputs are outside this bridge."
+                input.requestHeaders.isNotEmpty() -> "Request headers are only supported for remote inputs."
                 else -> null
             }
         if (reason != null) {
@@ -119,16 +163,27 @@ public class BundledFfmpegNativeDriver private constructor(
             input.kind != MediaInputKind.FILE -> "The bundled desktop runtime accepts local file inputs only."
             input.isLive -> "Live inputs are not supported by the bundled desktop runtime."
             input.isEncrypted -> "Encrypted and DRM-protected inputs are outside this bridge."
+            input.requestHeaders.isNotEmpty() -> "Request headers are only supported for remote inputs."
             request.output != BridgeOutput.CMAF_FRAGMENT_STREAM ->
                 "The bundled desktop driver currently emits a CMAF fragment stream."
             request.videoHandling != VideoHandling.COPY ->
                 "The bundled LGPL runtime copies compressed video and does not tone-map it."
+            request.audioHandling !in setOf(AudioHandling.OMIT, AudioHandling.COPY) ->
+                "The bundled LGPL runtime currently copies or omits audio."
+            request.subtitleHandling != SubtitleHandling.OMIT ->
+                "The bundled LGPL runtime does not burn subtitle tracks into video."
             request.dolbyVisionHandling != DolbyVisionHandling.PRESERVE ->
                 "Dolby Vision conversion requires the separate optional converter module."
             else -> null
         }
 
     public companion object {
+        private val defaultInstance: BundledFfmpegNativeDriver by lazy(LazyThreadSafetyMode.SYNCHRONIZED) { load() }
+
+        /** Loads the packaged runtime once and reuses it across probes, seeks, and playback sessions. */
+        @JvmStatic
+        public fun loadDefault(): BundledFfmpegNativeDriver = defaultInstance
+
         /** Loads and verifies the runtime before any media locator is opened. */
         @JvmStatic
         @JvmOverloads
@@ -150,7 +205,10 @@ public class BundledFfmpegNativeDriver private constructor(
 }
 
 private sealed interface SessionState {
-    data class Active(val positionUs: Long, val generation: Long) : SessionState
+    data class Active(
+        val positionUs: Long,
+        val generation: Long,
+    ) : SessionState
 
     data object Closed : SessionState
 }
@@ -160,6 +218,7 @@ private class DesktopFfmpegSession(
     private val runtime: LoadedFfmpegRuntime,
     private val input: MediaInput,
     private val request: BridgeRequest,
+    private val outputInfo: MediaOutputInfo,
 ) : MediaBridgeSession {
     private val state = MutableStateFlow<SessionState>(SessionState.Active(positionUs = 0L, generation = 0L))
     private val collectionStarted = AtomicBoolean(false)
@@ -173,6 +232,7 @@ private class DesktopFfmpegSession(
                     "A media bridge session supports one event collector.",
                 )
             }
+            emit(MediaBridgeEvent.OutputConfigured(outputInfo))
             emitAll(
                 state
                     .takeWhile { it is SessionState.Active }
@@ -218,6 +278,8 @@ private class DesktopFfmpegSession(
                             inputLocator = input.locator,
                             fragmentDurationUs = request.fragmentDurationUs,
                             startTimeUs = active.positionUs,
+                            preferredVideoTrackId = outputInfo.selectedVideoTrackId ?: -1,
+                            preferredAudioTrackId = outputInfo.selectedAudioTrackId ?: -2,
                         ) { bytes ->
                             if (cancelled.get() || !nativeContext.isActive) {
                                 return@remuxFragmentedMp4 false

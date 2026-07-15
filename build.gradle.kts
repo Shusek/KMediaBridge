@@ -11,7 +11,7 @@ plugins {
     alias(libs.plugins.ktlint)
 }
 
-val publicationVersion = providers.gradleProperty("publicationVersion").orElse("0.2.0-SNAPSHOT")
+val publicationVersion = providers.gradleProperty("publicationVersion").orElse("0.3.0-SNAPSHOT")
 val pythonExecutable = if (System.getProperty("os.name").startsWith("Windows")) "python" else "python3"
 
 allprojects {

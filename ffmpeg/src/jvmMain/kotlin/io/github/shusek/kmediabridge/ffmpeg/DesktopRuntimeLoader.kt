@@ -26,6 +26,7 @@ internal fun interface KmbWriteCallback : Callback {
     ): Int
 }
 
+@Suppress("FunctionName", "ktlint:standard:function-naming")
 internal interface KmbNativeApi : Library {
     fun kmb_abi_version(): Int
 
@@ -45,6 +46,8 @@ internal interface KmbNativeApi : Library {
         inputLocator: String,
         fragmentDurationUs: Long,
         startTimeUs: Long,
+        preferredVideoTrackId: Int,
+        preferredAudioTrackId: Int,
         writeCallback: KmbWriteCallback,
         opaque: Pointer?,
         outputError: PointerByReference,
@@ -77,6 +80,8 @@ internal class LoadedFfmpegRuntime(
         inputLocator: String,
         fragmentDurationUs: Long,
         startTimeUs: Long,
+        preferredVideoTrackId: Int,
+        preferredAudioTrackId: Int,
         consumer: (ByteArray) -> Boolean,
     ) {
         val outputError = PointerByReference()
@@ -95,6 +100,8 @@ internal class LoadedFfmpegRuntime(
                 inputLocator,
                 fragmentDurationUs,
                 startTimeUs,
+                preferredVideoTrackId,
+                preferredAudioTrackId,
                 callback,
                 null,
                 outputError,
@@ -125,7 +132,7 @@ internal class LoadedFfmpegRuntime(
 }
 
 internal object DesktopRuntimeLoader {
-    private const val SUPPORTED_ABI = 2
+    private const val SUPPORTED_ABI = 3
     private const val MANIFEST_NAME = "manifest.properties"
 
     fun load(
@@ -150,8 +157,9 @@ internal object DesktopRuntimeLoader {
 
         val directory = source.materialize(manifest)
         val resolvedLibraries = verifyLibraries(directory, manifest)
-        val bridge = manifest.libraries.singleOrNull { it.role == LibraryRole.BRIDGE }
-            ?: reject("The runtime manifest must declare exactly one bridge library.")
+        val bridge =
+            manifest.libraries.singleOrNull { it.role == LibraryRole.BRIDGE }
+                ?: reject("The runtime manifest must declare exactly one bridge library.")
         val (retained, api) =
             try {
                 val dependencies =
@@ -230,8 +238,7 @@ internal object DesktopRuntimeLoader {
         }
     }
 
-    private fun KmbNativeApi.borrowedString(pointer: Pointer?): String =
-        pointer?.getString(0L, Charsets.UTF_8.name()).orEmpty()
+    private fun KmbNativeApi.borrowedString(pointer: Pointer?): String = pointer?.getString(0L, Charsets.UTF_8.name()).orEmpty()
 
     private sealed interface RuntimeSource {
         fun readManifest(): NativePayloadManifest
@@ -246,12 +253,13 @@ internal object DesktopRuntimeLoader {
             private val prefix = "META-INF/kmediabridge/native/${platform.id}"
 
             override fun readManifest(): NativePayloadManifest {
-                val stream = classLoader.getResourceAsStream("$prefix/$MANIFEST_NAME")
-                    ?: throw MediaBridgeException(
-                        MediaBridgeErrorCode.UNSUPPORTED_REQUEST,
-                        "No bundled FFmpeg payload was found for ${platform.id}. Add " +
-                            "io.github.shusek:kmedia-bridge-ffmpeg-runtime-desktop at runtime.",
-                    )
+                val stream =
+                    classLoader.getResourceAsStream("$prefix/$MANIFEST_NAME")
+                        ?: throw MediaBridgeException(
+                            MediaBridgeErrorCode.UNSUPPORTED_REQUEST,
+                            "No bundled FFmpeg payload was found for ${platform.id}. Add " +
+                                "io.github.shusek:kmedia-bridge-ffmpeg-runtime-desktop at runtime.",
+                        )
                 return stream.use(NativePayloadManifest::read)
             }
 
@@ -268,8 +276,9 @@ internal object DesktopRuntimeLoader {
                 directory.toFile().deleteOnExit()
                 manifest.libraries.forEach { library ->
                     requireSimpleName(library.name)
-                    val stream = classLoader.getResourceAsStream("$prefix/${library.name}")
-                        ?: reject("A native library listed by the embedded manifest is missing.")
+                    val stream =
+                        classLoader.getResourceAsStream("$prefix/${library.name}")
+                            ?: reject("A native library listed by the embedded manifest is missing.")
                     val target = directory.resolve(library.name)
                     stream.use { Files.copy(it, target) }
                     secureFile(target)
@@ -338,8 +347,7 @@ internal object DesktopRuntimeLoader {
         }
     }
 
-    internal fun reject(message: String): Nothing =
-        throw MediaBridgeException(MediaBridgeErrorCode.NON_COMPLIANT_NATIVE_RUNTIME, message)
+    internal fun reject(message: String): Nothing = throw MediaBridgeException(MediaBridgeErrorCode.NON_COMPLIANT_NATIVE_RUNTIME, message)
 }
 
 private enum class LibraryRole {
@@ -370,6 +378,7 @@ private data class NativePayloadManifest(
     companion object {
         fun read(stream: InputStream): NativePayloadManifest {
             val properties = Properties().apply { load(stream) }
+
             fun required(name: String): String =
                 properties.getProperty(name)?.takeIf(String::isNotBlank)
                     ?: DesktopRuntimeLoader.run { reject("The native manifest is missing $name.") }
@@ -377,8 +386,9 @@ private data class NativePayloadManifest(
             if (required("schemaVersion") != "1") {
                 DesktopRuntimeLoader.run { reject("The native manifest schema is unsupported.") }
             }
-            val count = required("library.count").toIntOrNull()
-                ?: DesktopRuntimeLoader.run { reject("The native manifest has an invalid library count.") }
+            val count =
+                required("library.count").toIntOrNull()
+                    ?: DesktopRuntimeLoader.run { reject("The native manifest has an invalid library count.") }
             val libraries =
                 (0 until count).map { index ->
                     val role =
@@ -398,8 +408,9 @@ private data class NativePayloadManifest(
             }
             return NativePayloadManifest(
                 platform = required("platform"),
-                abiVersion = required("abiVersion").toIntOrNull()
-                    ?: DesktopRuntimeLoader.run { reject("The native manifest ABI is invalid.") },
+                abiVersion =
+                    required("abiVersion").toIntOrNull()
+                        ?: DesktopRuntimeLoader.run { reject("The native manifest ABI is invalid.") },
                 ffmpegVersion = required("ffmpegVersion"),
                 ffmpegLicenseSpdx = required("ffmpegLicenseSpdx"),
                 ffmpegReportedLicense = required("ffmpegReportedLicense"),
@@ -415,7 +426,9 @@ private data class NativePayloadManifest(
     }
 }
 
-private data class DesktopPlatform(val id: String) {
+private data class DesktopPlatform(
+    val id: String,
+) {
     companion object {
         fun detect(): DesktopPlatform {
             val osName = System.getProperty("os.name", "").lowercase()

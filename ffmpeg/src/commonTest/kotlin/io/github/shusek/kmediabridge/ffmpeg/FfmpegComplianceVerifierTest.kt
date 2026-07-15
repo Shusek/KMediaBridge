@@ -19,7 +19,7 @@ class FfmpegComplianceVerifierTest {
 
     @Test
     fun rejectsEnableGplEvenWhenManifestClaimsLgpl() {
-        val runtime = compliantRuntime().copy(configureArguments = compliantArguments + "--enable-gpl")
+        val runtime = compliantRuntime().copy(configureArguments = COMPLIANT_ARGUMENTS + "--enable-gpl")
 
         val failure =
             assertFailsWith<MediaBridgeException> {
@@ -45,7 +45,7 @@ class FfmpegComplianceVerifierTest {
         val report =
             FfmpegComplianceVerifier.verify(
                 compliantRuntime().copy(
-                    configureArguments = compliantArguments - "--disable-static" + "--enable-static",
+                    configureArguments = COMPLIANT_ARGUMENTS - "--disable-static" + "--enable-static",
                 ),
             )
 
@@ -73,7 +73,7 @@ class FfmpegComplianceVerifierTest {
                             version = "1.0",
                             licenseSpdx = "Apache-2.0",
                             sourceArchiveUrl = "https://example.invalid/sample-1.0.tar.xz",
-                            sourceArchiveSha256 = sha256,
+                            sourceArchiveSha256 = SHA256,
                         ),
                     ),
             )
@@ -88,10 +88,10 @@ class FfmpegComplianceVerifierTest {
             ffmpegVersion = "8.1.2",
             ffmpegLicenseSpdx = "LGPL-2.1-or-later",
             ffmpegReportedLicense = "LGPL version 2.1 or later",
-            configureArguments = compliantArguments,
+            configureArguments = COMPLIANT_ARGUMENTS,
             ffmpegSourceArchiveUrl = "https://github.com/Shusek/KMediaBridge/releases/download/v0.2.0/ffmpeg-8.1.2.tar.xz",
-            ffmpegSourceArchiveSha256 = sha256,
-            nativeArtifactSha256 = sha256,
+            ffmpegSourceArchiveSha256 = SHA256,
+            nativeArtifactSha256 = SHA256,
             buildRecipeUrl = "https://github.com/Shusek/KMediaBridge/tree/0123456789abcdef/native",
             buildRecipeRevision = "0123456789abcdef",
             exactCorrespondingSourceAvailable = true,
@@ -99,13 +99,13 @@ class FfmpegComplianceVerifierTest {
         )
 
     private companion object {
-        val compliantArguments: List<String> =
+        val COMPLIANT_ARGUMENTS: List<String> =
             listOf(
                 "--disable-gpl",
                 "--disable-nonfree",
                 "--enable-shared",
                 "--disable-static",
             )
-        const val sha256: String = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        const val SHA256: String = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     }
 }

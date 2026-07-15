@@ -14,7 +14,7 @@ build recipe, generated FFmpeg configuration, compiler identity, license
 texts, notices, runtime inspection, and a SHA-256 inventory. Verify the
 inventory before replacing any file.
 
-A compatible replacement must retain C ABI version 2 and the platform library
+A compatible replacement must retain C ABI version 3 and the platform library
 names. Replace `libavformat`, `libavcodec`, and `libavutil` together, then
 rebuild `libkmediabridge` against those exact headers. Run
 `scripts/inspect_native_runtime.py` again; a GPL/nonfree, statically linked, or

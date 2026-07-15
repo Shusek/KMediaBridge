@@ -129,7 +129,7 @@ def main() -> int:
             "",
         )
         license_match = re.search(r"LGPL version [^\r\n]+", dll_text)
-        abi_version = 2
+        abi_version = 3
         ffmpeg_version = arguments.expected_version
         ffmpeg_license = license_match.group(0) if license_match else ""
         if ffmpeg_version not in dll_text:
@@ -147,7 +147,7 @@ def main() -> int:
         ffmpeg_license = library.kmb_ffmpeg_license().decode("utf-8")
         configuration = library.kmb_ffmpeg_configuration().decode("utf-8")
 
-    if abi_version != 2:
+    if abi_version != 3:
         print(f"runtime inspection error: unsupported ABI version {abi_version}", file=sys.stderr)
         return 1
     if "LGPL" not in ffmpeg_license.upper():

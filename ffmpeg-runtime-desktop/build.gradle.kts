@@ -14,7 +14,7 @@ val nativePayloadDirectory = providers.gradleProperty("nativePayloadDirectory")
 
 sourceSets {
     main {
-        nativePayloadDirectory.orNull?.let { resources.srcDir(it) }
+        nativePayloadDirectory.orNull?.let { resources.srcDir(rootProject.file(it)) }
     }
 }
 

@@ -52,7 +52,8 @@ and ABI details never appear in application-facing contracts.
 
 ## Current native ABI
 
-ABI version 2 exposes runtime identity, a typed probe JSON document, a file
-remux operation, and a callback-based fragmented-MP4 stream. The callback
-supports backpressure and cancellation. The remuxer copies supported
+ABI version 3 exposes runtime identity, a typed probe JSON document (including
+audio and subtitle selection metadata), a file remux operation, and a
+track-selecting callback-based fragmented-MP4 stream. The callback supports
+backpressure and cancellation. The remuxer copies supported selected
 audio/video packets and never re-encodes the video picture.

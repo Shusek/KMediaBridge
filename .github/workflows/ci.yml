@@ -55,7 +55,7 @@ jobs:
           java-version: "17"
           cache: gradle
       - name: Verify staged Maven publications
-        run: ./gradlew --no-daemon complianceCheck -PpublicationVersion=0.2.0-CI
+        run: ./gradlew --no-daemon complianceCheck -PpublicationVersion=0.3.0-CI
 
   native-lgpl:
     name: Native LGPL runtime (${{ matrix.platform }})
@@ -121,7 +121,7 @@ jobs:
           --dist "$RUNNER_TEMP/native-dist"
           --platform "${{ matrix.platform }}"
           --resources "$RUNNER_TEMP/native-resources"
-          --release-version 0.2.0
+          --release-version 0.3.0-CI
           --revision "${{ github.sha }}"
       - name: Set up Java for the JVM integration test
         if: matrix.runnable

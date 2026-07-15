@@ -3,6 +3,7 @@
 #include "kmedia_bridge.h"
 
 #include <libavcodec/avcodec.h>
+#include <libavcodec/codec_desc.h>
 #include <libavcodec/codec_par.h>
 #include <libavcodec/packet.h>
 #include <libavformat/avformat.h>
@@ -10,7 +11,9 @@
 #include <libavutil/avutil.h>
 #include <libavutil/bprint.h>
 #include <libavutil/dovi_meta.h>
+#include <libavutil/dict.h>
 #include <libavutil/error.h>
+#include <libavutil/mastering_display_metadata.h>
 #include <libavutil/mem.h>
 #include <libavutil/pixdesc.h>
 
@@ -114,8 +117,45 @@ static int kmb_bit_depth(const AVCodecParameters *parameters) {
     return descriptor != NULL ? descriptor->comp[0].depth : 0;
 }
 
+static const char *kmb_metadata_value(const AVStream *stream, const char *key) {
+    const AVDictionaryEntry *entry = av_dict_get(stream->metadata, key, NULL, 0);
+    return entry != NULL && entry->value != NULL && entry->value[0] != '\0' ? entry->value : NULL;
+}
+
+static void kmb_append_track_metadata(AVBPrint *output, const AVStream *stream) {
+    const char *language = kmb_metadata_value(stream, "language");
+    const char *title = kmb_metadata_value(stream, "title");
+    av_bprintf(output, ",\"language\":");
+    if (language == NULL) {
+        av_bprintf(output, "null");
+    } else {
+        kmb_json_string(output, language);
+    }
+    av_bprintf(output, ",\"title\":");
+    if (title == NULL) {
+        av_bprintf(output, "null");
+    } else {
+        kmb_json_string(output, title);
+    }
+    av_bprintf(
+        output,
+        ",\"isDefault\":%s",
+        (stream->disposition & AV_DISPOSITION_DEFAULT) != 0 ? "true" : "false"
+    );
+}
+
 static void kmb_append_video_track(AVBPrint *output, const AVStream *stream) {
     const AVCodecParameters *parameters = stream->codecpar;
+    const AVPacketSideData *mastering_display = av_packet_side_data_get(
+        parameters->coded_side_data,
+        parameters->nb_coded_side_data,
+        AV_PKT_DATA_MASTERING_DISPLAY_METADATA
+    );
+    const AVPacketSideData *content_light = av_packet_side_data_get(
+        parameters->coded_side_data,
+        parameters->nb_coded_side_data,
+        AV_PKT_DATA_CONTENT_LIGHT_LEVEL
+    );
     const AVPacketSideData *hdr10_plus = av_packet_side_data_get(
         parameters->coded_side_data,
         parameters->nb_coded_side_data,
@@ -129,6 +169,14 @@ static void kmb_append_video_track(AVBPrint *output, const AVStream *stream) {
     const AVDOVIDecoderConfigurationRecord *dovi =
         dolby_vision != NULL && dolby_vision->size >= sizeof(AVDOVIDecoderConfigurationRecord)
             ? (const AVDOVIDecoderConfigurationRecord *)dolby_vision->data
+            : NULL;
+    const AVMasteringDisplayMetadata *mastering =
+        mastering_display != NULL && mastering_display->size >= sizeof(AVMasteringDisplayMetadata)
+            ? (const AVMasteringDisplayMetadata *)mastering_display->data
+            : NULL;
+    const AVContentLightMetadata *light =
+        content_light != NULL && content_light->size >= sizeof(AVContentLightMetadata)
+            ? (const AVContentLightMetadata *)content_light->data
             : NULL;
     const AVRational frame_rate = stream->avg_frame_rate;
 
@@ -172,6 +220,42 @@ static void kmb_append_video_track(AVBPrint *output, const AVStream *stream) {
     } else {
         av_bprintf(output, ",\"dolbyVision\":null");
     }
+    if (mastering != NULL && mastering->has_primaries && mastering->has_luminance) {
+        av_bprintf(
+            output,
+            ",\"masteringDisplay\":{"
+            "\"redX\":%.10g,\"redY\":%.10g,"
+            "\"greenX\":%.10g,\"greenY\":%.10g,"
+            "\"blueX\":%.10g,\"blueY\":%.10g,"
+            "\"whiteX\":%.10g,\"whiteY\":%.10g,"
+            "\"minimumLuminanceNits\":%.10g,\"maximumLuminanceNits\":%.10g}",
+            av_q2d(mastering->display_primaries[0][0]),
+            av_q2d(mastering->display_primaries[0][1]),
+            av_q2d(mastering->display_primaries[1][0]),
+            av_q2d(mastering->display_primaries[1][1]),
+            av_q2d(mastering->display_primaries[2][0]),
+            av_q2d(mastering->display_primaries[2][1]),
+            av_q2d(mastering->white_point[0]),
+            av_q2d(mastering->white_point[1]),
+            av_q2d(mastering->min_luminance),
+            av_q2d(mastering->max_luminance)
+        );
+    } else {
+        av_bprintf(output, ",\"masteringDisplay\":null");
+    }
+    if (light != NULL) {
+        av_bprintf(
+            output,
+            ",\"contentLightLevel\":{"
+            "\"maximumContentLightLevelNits\":%u,"
+            "\"maximumFrameAverageLightLevelNits\":%u}",
+            light->MaxCLL,
+            light->MaxFALL
+        );
+    } else {
+        av_bprintf(output, ",\"contentLightLevel\":null");
+    }
+    kmb_append_track_metadata(output, stream);
     av_bprintf(output, "}");
 }
 
@@ -181,10 +265,27 @@ static void kmb_append_audio_track(AVBPrint *output, const AVStream *stream) {
     kmb_json_string(output, avcodec_get_name(parameters->codec_id));
     av_bprintf(
         output,
-        ",\"channels\":%d,\"sampleRateHz\":%d}",
+        ",\"channels\":%d,\"sampleRateHz\":%d,\"bitrate\":%lld",
         parameters->ch_layout.nb_channels,
-        parameters->sample_rate
+        parameters->sample_rate,
+        (long long)parameters->bit_rate
     );
+    kmb_append_track_metadata(output, stream);
+    av_bprintf(output, "}");
+}
+
+static void kmb_append_subtitle_track(AVBPrint *output, const AVStream *stream) {
+    const AVCodecParameters *parameters = stream->codecpar;
+    const AVCodecDescriptor *descriptor = avcodec_descriptor_get(parameters->codec_id);
+    av_bprintf(output, "{\"type\":\"subtitle\",\"id\":%d,\"codec\":", stream->index);
+    kmb_json_string(output, avcodec_get_name(parameters->codec_id));
+    av_bprintf(
+        output,
+        ",\"isImageBased\":%s",
+        descriptor != NULL && (descriptor->props & AV_CODEC_PROP_BITMAP_SUB) != 0 ? "true" : "false"
+    );
+    kmb_append_track_metadata(output, stream);
+    av_bprintf(output, "}");
 }
 
 uint32_t kmb_abi_version(void) {
@@ -245,7 +346,8 @@ KmbResult kmb_probe_json(const char *input_locator, char **output_json, char **o
     for (index = 0; index < input->nb_streams; index++) {
         const AVStream *stream = input->streams[index];
         if (stream->codecpar->codec_type != AVMEDIA_TYPE_VIDEO &&
-            stream->codecpar->codec_type != AVMEDIA_TYPE_AUDIO) {
+            stream->codecpar->codec_type != AVMEDIA_TYPE_AUDIO &&
+            stream->codecpar->codec_type != AVMEDIA_TYPE_SUBTITLE) {
             continue;
         }
         if (appended) {
@@ -253,8 +355,10 @@ KmbResult kmb_probe_json(const char *input_locator, char **output_json, char **o
         }
         if (stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
             kmb_append_video_track(&json, stream);
-        } else {
+        } else if (stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
             kmb_append_audio_track(&json, stream);
+        } else {
+            kmb_append_subtitle_track(&json, stream);
         }
         appended = 1;
     }
@@ -275,6 +379,31 @@ typedef struct KmbWriteState {
     int cancelled;
 } KmbWriteState;
 
+static int kmb_select_track(const AVFormatContext *input, enum AVMediaType type, int requested_track_id) {
+    int first = -1;
+    unsigned int index = 0;
+    if (requested_track_id >= 0) {
+        if ((unsigned int)requested_track_id >= input->nb_streams ||
+            input->streams[requested_track_id]->codecpar->codec_type != type) {
+            return -2;
+        }
+        return requested_track_id;
+    }
+    for (index = 0; index < input->nb_streams; index++) {
+        const AVStream *stream = input->streams[index];
+        if (stream->codecpar->codec_type != type) {
+            continue;
+        }
+        if (first < 0) {
+            first = (int)index;
+        }
+        if ((stream->disposition & AV_DISPOSITION_DEFAULT) != 0) {
+            return (int)index;
+        }
+    }
+    return first;
+}
+
 static int kmb_write_packet(void *opaque, const uint8_t *bytes, int size) {
     KmbWriteState *state = (KmbWriteState *)opaque;
     if (state == NULL || state->callback == NULL || size < 0) {
@@ -292,6 +421,8 @@ static KmbResult kmb_remux_fragmented_mp4_internal(
     const char *output_path,
     int64_t fragment_duration_us,
     int64_t start_time_us,
+    int preferred_video_track_id,
+    int preferred_audio_track_id,
     KmbWriteCallback write_callback,
     void *opaque,
     char **output_error
@@ -304,6 +435,8 @@ static KmbResult kmb_remux_fragmented_mp4_internal(
     AVDictionary *muxer_options = NULL;
     int *stream_mapping = NULL;
     int output_stream_count = 0;
+    int selected_video_track_id = -1;
+    int selected_audio_track_id = -1;
     int result = 0;
     unsigned int index = 0;
     KmbResult bridge_result = KMB_OK;
@@ -329,6 +462,23 @@ static KmbResult kmb_remux_fragmented_mp4_internal(
         kmb_set_av_error(output_error, "Could not read media stream information", result);
         bridge_result = KMB_STREAM_INFO_FAILED;
         goto cleanup;
+    }
+    selected_video_track_id = kmb_select_track(input, AVMEDIA_TYPE_VIDEO, preferred_video_track_id);
+    if (selected_video_track_id < 0) {
+        kmb_set_error(
+            output_error,
+            selected_video_track_id == -2 ? "The requested video track does not exist." : "No video track is available."
+        );
+        bridge_result = KMB_UNSUPPORTED;
+        goto cleanup;
+    }
+    if (preferred_audio_track_id != -2) {
+        selected_audio_track_id = kmb_select_track(input, AVMEDIA_TYPE_AUDIO, preferred_audio_track_id);
+        if (selected_audio_track_id == -2) {
+            kmb_set_error(output_error, "The requested audio track does not exist.");
+            bridge_result = KMB_UNSUPPORTED;
+            goto cleanup;
+        }
     }
     if (start_time_us > 0) {
         result = avformat_seek_file(input, -1, INT64_MIN, start_time_us, start_time_us, AVSEEK_FLAG_BACKWARD);
@@ -356,9 +506,13 @@ static KmbResult kmb_remux_fragmented_mp4_internal(
         const AVStream *input_stream = input->streams[index];
         AVStream *output_stream = NULL;
         stream_mapping[index] = -1;
-        if (input_stream->codecpar->codec_type != AVMEDIA_TYPE_VIDEO &&
-            input_stream->codecpar->codec_type != AVMEDIA_TYPE_AUDIO) {
+        if ((int)index != selected_video_track_id && (int)index != selected_audio_track_id) {
             continue;
+        }
+        if (avformat_query_codec(output->oformat, input_stream->codecpar->codec_id, FF_COMPLIANCE_NORMAL) <= 0) {
+            kmb_set_error(output_error, "A selected media track cannot be represented in fragmented MP4.");
+            bridge_result = KMB_UNSUPPORTED;
+            goto cleanup;
         }
         output_stream = avformat_new_stream(output, NULL);
         if (output_stream == NULL) {
@@ -498,6 +652,8 @@ KmbResult kmb_remux_fragmented_mp4(
         output_path,
         4000000,
         0,
+        -1,
+        -1,
         NULL,
         NULL,
         output_error
@@ -508,6 +664,8 @@ KmbResult kmb_remux_fragmented_mp4_stream(
     const char *input_locator,
     int64_t fragment_duration_us,
     int64_t start_time_us,
+    int32_t preferred_video_track_id,
+    int32_t preferred_audio_track_id,
     KmbWriteCallback write_callback,
     void *opaque,
     char **output_error
@@ -521,6 +679,8 @@ KmbResult kmb_remux_fragmented_mp4_stream(
         NULL,
         fragment_duration_us,
         start_time_us,
+        preferred_video_track_id,
+        preferred_audio_track_id,
         write_callback,
         opaque,
         output_error

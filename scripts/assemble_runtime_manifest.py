@@ -11,6 +11,14 @@ import json
 from pathlib import Path
 
 
+REQUIRED_RUNTIME_PLATFORMS = {
+    "linux-x86_64",
+    "macos-aarch64",
+    "macos-x86_64",
+    "windows-x86_64",
+}
+
+
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -38,6 +46,12 @@ def main() -> int:
     manifests = sorted(native_root.glob("*/manifest.properties"))
     if not manifests:
         raise ValueError("No platform payload manifests were found")
+    discovered_platforms = {manifest.parent.name for manifest in manifests}
+    if discovered_platforms != REQUIRED_RUNTIME_PLATFORMS:
+        raise ValueError(
+            "Native runtime platform matrix differs: "
+            f"expected {sorted(REQUIRED_RUNTIME_PLATFORMS)}, got {sorted(discovered_platforms)}"
+        )
 
     platforms: list[dict] = []
     payloads: list[dict] = []
@@ -49,12 +63,16 @@ def main() -> int:
         platform = properties["platform"]
         if manifest_path.parent.name != platform:
             raise ValueError(f"Platform directory and manifest differ: {manifest_path}")
-        if properties["abiVersion"] != "2" or properties["dynamicLinkingVerified"] != "true":
+        if properties["abiVersion"] != "3" or properties["dynamicLinkingVerified"] != "true":
             raise ValueError(f"Unverified payload: {platform}")
         ffmpeg_version = ffmpeg_version or properties["ffmpegVersion"]
         source_sha256 = source_sha256 or properties["sourceSha256"]
         source_offer_url = source_offer_url or properties["sourceOfferUrl"]
-        if ffmpeg_version != properties["ffmpegVersion"] or source_sha256 != properties["sourceSha256"]:
+        if (
+            ffmpeg_version != properties["ffmpegVersion"]
+            or source_sha256 != properties["sourceSha256"]
+            or source_offer_url != properties["sourceOfferUrl"]
+        ):
             raise ValueError("Platform payloads do not use the same exact FFmpeg source")
         count = int(properties["library.count"])
         platform_payloads: list[str] = []
