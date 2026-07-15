@@ -14,7 +14,8 @@ consistent.
 
 ## FFmpeg build boundary
 
-- Use a signed upstream FFmpeg release and pin its SHA-256.
+- Use a signed upstream FFmpeg release, pin its SHA-256, and verify its detached
+  signature against fingerprint `FCF986EA15E6E293A5644F10B4322F04D67658D8`.
 - Configure with explicit `--disable-gpl` and `--disable-nonfree`.
 - Do not enable x264, x265, Xvid, vid.stab, frei0r, Rubber Band, libcdio,
   davs2/xavs, smbclient, or another component that changes the effective
@@ -37,6 +38,11 @@ Every native payload release must contain or link immutably to:
 7. A CycloneDX SBOM.
 8. A source offer hosted beside the downloadable binary.
 9. Replacement/relinking instructions appropriate to the platform.
+
+Stable desktop releases publish a single optional Maven runtime JAR plus
+separate replaceable platform archives. The JAR's aggregate manifest must list
+macOS arm64/x64, Linux x64, and Windows x64 and must match every native entry's
+SHA-256. Release publication fails if a static library or executable is found.
 
 The official FFmpeg legal checklist remains the upstream baseline:
 https://ffmpeg.org/legal.html

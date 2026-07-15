@@ -33,6 +33,21 @@ def main() -> int:
     library.kmb_probe_json.restype = ctypes.c_int
     library.kmb_remux_fragmented_mp4.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_void_p)]
     library.kmb_remux_fragmented_mp4.restype = ctypes.c_int
+    callback_type = ctypes.CFUNCTYPE(
+        ctypes.c_int,
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_uint8),
+        ctypes.c_int32,
+    )
+    library.kmb_remux_fragmented_mp4_stream.argtypes = [
+        ctypes.c_char_p,
+        ctypes.c_int64,
+        ctypes.c_int64,
+        callback_type,
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_void_p),
+    ]
+    library.kmb_remux_fragmented_mp4_stream.restype = ctypes.c_int
     library.kmb_free_string.argtypes = [ctypes.c_void_p]
 
     input_bytes = str(arguments.input.resolve()).encode("utf-8")
@@ -66,6 +81,48 @@ def main() -> int:
         return 1
     if not arguments.output.is_file() or arguments.output.stat().st_size == 0:
         print("native smoke error: remux produced no output", file=sys.stderr)
+        return 1
+
+    streamed = bytearray()
+
+    @callback_type
+    def write_callback(_opaque, bytes_pointer, size):
+        streamed.extend(ctypes.string_at(bytes_pointer, size))
+        return 0
+
+    error_pointer = ctypes.c_void_p()
+    stream_result = library.kmb_remux_fragmented_mp4_stream(
+        input_bytes,
+        1_000_000,
+        0,
+        write_callback,
+        None,
+        ctypes.byref(error_pointer),
+    )
+    stream_error = decode_and_free(library, error_pointer)
+    if stream_result != 0 or not streamed:
+        print(
+            f"native smoke error: callback remux failed without exposing the locator: {stream_error}",
+            file=sys.stderr,
+        )
+        return 1
+
+    @callback_type
+    def cancel_callback(_opaque, _bytes_pointer, _size):
+        return 1
+
+    error_pointer = ctypes.c_void_p()
+    cancel_result = library.kmb_remux_fragmented_mp4_stream(
+        input_bytes,
+        1_000_000,
+        0,
+        cancel_callback,
+        None,
+        ctypes.byref(error_pointer),
+    )
+    decode_and_free(library, error_pointer)
+    if cancel_result != 9:
+        print("native smoke error: callback cancellation did not return KMB_CANCELLED", file=sys.stderr)
         return 1
 
     print(f"Native smoke test passed with {len(probe['tracks'])} track(s).")

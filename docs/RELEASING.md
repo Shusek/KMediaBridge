@@ -1,21 +1,22 @@
 # Releasing
 
-1. Update the pinned FFmpeg source and verify its upstream signature and
-   SHA-256 when applicable.
-2. Run `./gradlew clean check complianceCheck` on a supported macOS host.
-3. Run native build jobs on every target platform. While
-   `distributionStatus` is `source-only`, these outputs are ephemeral CI
-   evidence and must not be attached to a release.
-4. Before changing `distributionStatus` to `binary`, confirm that every native
-   archive contains the embedded compliance manifest, exact source offer,
-   notices, relinking instructions, and matching hashes.
-5. Create an immutable stable SemVer tag such as `v0.1.0`.
-6. The release workflow publishes Maven artifacts to the version-preserving
-   `gh-pages` repository and attaches the compliance bundle to the GitHub
-   release. Version `0.1.0` publishes Kotlin artifacts and native ABI source,
-   but deliberately no native FFmpeg payload.
-7. Maven Central publication is allowed only when signing and Central Portal
-   credentials have been entered manually by the maintainer outside Codex.
+1. Update the pinned FFmpeg source only after checking the upstream release and
+   exact SHA-256.
+2. Run `./gradlew clean check complianceCheck` locally.
+3. Merge only after CI builds and inspects Linux x64, macOS arm64/x64, and
+   Windows x64. Runnable desktop hosts must also load, probe, and stream the
+   packaged runtime through the JVM API.
+4. Create an immutable stable tag such as `v0.2.0`.
+5. Tag CI rebuilds every native payload, embeds per-platform manifests, merges
+   the aggregate binary manifest, reruns publication verification, and then
+   publishes all three Maven artifacts to the version-preserving `gh-pages`
+   repository.
+6. The GitHub release receives the exact FFmpeg archive, platform bundles,
+   native classpath resources, complete compliance source bundle, CycloneDX
+   SBOM, and SHA-256 inventory.
+7. Maven Central publication reuses the native resources from that immutable
+   GitHub release. It is allowed only after signing and Central Portal secret
+   names have been configured manually by the maintainer outside Codex.
 
 Published versions are immutable. A broken release is superseded by a new
 version; artifacts are never replaced in place.

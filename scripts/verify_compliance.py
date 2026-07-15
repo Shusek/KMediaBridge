@@ -65,7 +65,13 @@ def require_public_https_url(label: str, value: str) -> None:
 
 def verify_headers(root: Path) -> None:
     candidates: list[Path] = [root / "build.gradle.kts", root / "settings.gradle.kts"]
-    for directory in (root / "api", root / "ffmpeg", root / "native", root / "scripts"):
+    for directory in (
+        root / "api",
+        root / "ffmpeg",
+        root / "ffmpeg-runtime-desktop",
+        root / "native",
+        root / "scripts",
+    ):
         if directory.exists():
             candidates.extend(path for path in directory.rglob("*") if path.suffix in SOURCE_SUFFIXES)
 
@@ -139,6 +145,9 @@ def verify_manifest(root: Path) -> dict:
         fail("The native recipe FFmpeg version differs from the manifest.")
     if f'source_sha256="{ffmpeg.get("sourceSha256")}"' not in recipe:
         fail("The native recipe FFmpeg source hash differs from the manifest.")
+    release_verifier = (root / "scripts/verify_ffmpeg_release.sh").read_text(encoding="utf-8")
+    if "FCF986EA15E6E293A5644F10B4322F04D67658D8" not in release_verifier:
+        fail("The official FFmpeg release signing-key fingerprint is not pinned.")
     return manifest
 
 

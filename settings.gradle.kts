@@ -35,3 +35,4 @@ dependencyResolutionManagement {
 
 include(":api")
 include(":ffmpeg")
+include(":ffmpeg-runtime-desktop")

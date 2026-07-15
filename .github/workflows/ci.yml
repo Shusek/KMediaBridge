@@ -55,19 +55,83 @@ jobs:
           java-version: "17"
           cache: gradle
       - name: Verify staged Maven publications
-        run: ./gradlew --no-daemon complianceCheck -PpublicationVersion=0.1.0-CI
+        run: ./gradlew --no-daemon complianceCheck -PpublicationVersion=0.2.0-CI
 
   native-lgpl:
-    name: Native LGPL boundary (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: Native LGPL runtime (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-          - macos-14
+        include:
+          - platform: linux-x86_64
+            runner: ubuntu-24.04
+            build: ./native/build-ffmpeg-unix.sh
+            runnable: true
+          - platform: macos-aarch64
+            runner: macos-15
+            build: ./native/build-ffmpeg-unix.sh
+            runnable: true
+          - platform: macos-x86_64
+            runner: macos-15-intel
+            build: ./native/build-ffmpeg-unix.sh
+            runnable: true
+          - platform: windows-x86_64
+            runner: ubuntu-24.04
+            build: ./native/build-ffmpeg-windows-x64.sh
+            runnable: false
     steps:
       - name: Check out source
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - name: Install the Windows cross toolchain
+        if: matrix.platform == 'windows-x86_64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes gcc-mingw-w64-x86-64 gnupg
+      - name: Install GnuPG on Linux
+        if: matrix.platform == 'linux-x86_64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes gnupg
+      - name: Install GnuPG on macOS
+        if: startsWith(matrix.platform, 'macos-')
+        run: brew install gnupg
+      - name: Verify the signed FFmpeg source release
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/native-work"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$RUNNER_TEMP/native-work/ffmpeg-8.1.2.tar.xz" \
+            https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$RUNNER_TEMP/ffmpeg-8.1.2.tar.xz.asc" \
+            https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz.asc
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$RUNNER_TEMP/ffmpeg-devel.asc" \
+            https://ffmpeg.org/ffmpeg-devel.asc
+          ./scripts/verify_ffmpeg_release.sh \
+            "$RUNNER_TEMP/native-work/ffmpeg-8.1.2.tar.xz" \
+            "$RUNNER_TEMP/ffmpeg-8.1.2.tar.xz.asc" \
+            "$RUNNER_TEMP/ffmpeg-devel.asc"
       - name: Build and inspect the native runtime
-        run: ./native/build-ffmpeg-unix.sh "$RUNNER_TEMP/native-work" "$RUNNER_TEMP/native-dist"
+        run: ${{ matrix.build }} "$RUNNER_TEMP/native-work" "$RUNNER_TEMP/native-dist"
+      - name: Package classpath runtime resources
+        run: >-
+          python3 scripts/package_native_runtime.py
+          --dist "$RUNNER_TEMP/native-dist"
+          --platform "${{ matrix.platform }}"
+          --resources "$RUNNER_TEMP/native-resources"
+          --release-version 0.2.0
+          --revision "${{ github.sha }}"
+      - name: Set up Java for the JVM integration test
+        if: matrix.runnable
+        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: Load, probe, and stream through the packaged runtime
+        if: matrix.runnable
+        run: >-
+          ./gradlew --no-daemon :ffmpeg:jvmTest
+          -PnativePayloadDirectory="$RUNNER_TEMP/native-resources"

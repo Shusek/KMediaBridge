@@ -16,7 +16,7 @@ permissions:
 jobs:
   central:
     name: Publish signed artifacts
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Check out the requested immutable tag
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -37,10 +37,22 @@ jobs:
             exit 1
           fi
           test "$(git tag --points-at HEAD)" = "v${{ inputs.version }}"
+      - name: Download the already released native resources
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/native-resources"
+          gh release download "v${{ inputs.version }}" \
+            --pattern "kmedia-bridge-${{ inputs.version }}-native-resources.tar.gz" \
+            --dir "$RUNNER_TEMP"
+          tar -xzf "$RUNNER_TEMP/kmedia-bridge-${{ inputs.version }}-native-resources.tar.gz" \
+            -C "$RUNNER_TEMP/native-resources"
       - name: Run release gates
         run: >-
           ./gradlew --no-daemon check complianceCheck
           -PpublicationVersion=${{ inputs.version }}
+          -PnativePayloadDirectory="$RUNNER_TEMP/native-resources"
       - name: Publish and release through Central Portal
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
@@ -51,3 +63,4 @@ jobs:
           ./gradlew --no-daemon --no-configuration-cache
           publishAndReleaseToMavenCentral
           -PpublicationVersion=${{ inputs.version }}
+          -PnativePayloadDirectory="$RUNNER_TEMP/native-resources"

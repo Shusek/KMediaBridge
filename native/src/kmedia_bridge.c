@@ -14,6 +14,7 @@
 #include <libavutil/mem.h>
 #include <libavutil/pixdesc.h>
 
+#include <errno.h>
 #include <stddef.h>
 #include <string.h>
 
@@ -268,26 +269,53 @@ KmbResult kmb_probe_json(const char *input_locator, char **output_json, char **o
     return KMB_OK;
 }
 
-KmbResult kmb_remux_fragmented_mp4(
+typedef struct KmbWriteState {
+    KmbWriteCallback callback;
+    void *opaque;
+    int cancelled;
+} KmbWriteState;
+
+static int kmb_write_packet(void *opaque, const uint8_t *bytes, int size) {
+    KmbWriteState *state = (KmbWriteState *)opaque;
+    if (state == NULL || state->callback == NULL || size < 0) {
+        return AVERROR(EINVAL);
+    }
+    if (state->callback(state->opaque, bytes, size) != 0) {
+        state->cancelled = 1;
+        return AVERROR_EXIT;
+    }
+    return size;
+}
+
+static KmbResult kmb_remux_fragmented_mp4_internal(
     const char *input_locator,
     const char *output_path,
+    int64_t fragment_duration_us,
+    int64_t start_time_us,
+    KmbWriteCallback write_callback,
+    void *opaque,
     char **output_error
 ) {
     AVFormatContext *input = NULL;
     AVFormatContext *output = NULL;
     AVPacket *packet = NULL;
+    AVIOContext *custom_io = NULL;
+    unsigned char *custom_buffer = NULL;
     AVDictionary *muxer_options = NULL;
     int *stream_mapping = NULL;
     int output_stream_count = 0;
     int result = 0;
     unsigned int index = 0;
     KmbResult bridge_result = KMB_OK;
+    KmbWriteState write_state = {write_callback, opaque, 0};
+    const int uses_callback = write_callback != NULL;
 
     if (output_error != NULL) {
         *output_error = NULL;
     }
-    if (input_locator == NULL || output_path == NULL) {
-        kmb_set_error(output_error, "Input and output paths are required.");
+    if (input_locator == NULL || fragment_duration_us <= 0 || start_time_us < 0 ||
+        (!uses_callback && output_path == NULL)) {
+        kmb_set_error(output_error, "Valid input, output, fragment duration, and start time are required.");
         return KMB_INVALID_ARGUMENT;
     }
 
@@ -301,6 +329,15 @@ KmbResult kmb_remux_fragmented_mp4(
         kmb_set_av_error(output_error, "Could not read media stream information", result);
         bridge_result = KMB_STREAM_INFO_FAILED;
         goto cleanup;
+    }
+    if (start_time_us > 0) {
+        result = avformat_seek_file(input, -1, INT64_MIN, start_time_us, start_time_us, AVSEEK_FLAG_BACKWARD);
+        if (result < 0) {
+            kmb_set_av_error(output_error, "Could not seek media input", result);
+            bridge_result = KMB_READ_FAILED;
+            goto cleanup;
+        }
+        avformat_flush(input);
     }
     result = avformat_alloc_output_context2(&output, NULL, "mp4", output_path);
     if (result < 0 || output == NULL) {
@@ -343,7 +380,23 @@ KmbResult kmb_remux_fragmented_mp4(
         output_stream->time_base = input_stream->time_base;
     }
 
-    if (!(output->oformat->flags & AVFMT_NOFILE)) {
+    if (uses_callback) {
+        custom_buffer = av_malloc(32 * 1024);
+        if (custom_buffer == NULL) {
+            kmb_set_error(output_error, "Could not allocate the output callback buffer.");
+            bridge_result = KMB_ALLOCATION_FAILED;
+            goto cleanup;
+        }
+        custom_io = avio_alloc_context(custom_buffer, 32 * 1024, 1, &write_state, NULL, kmb_write_packet, NULL);
+        if (custom_io == NULL) {
+            kmb_set_error(output_error, "Could not create the output callback context.");
+            bridge_result = KMB_ALLOCATION_FAILED;
+            goto cleanup;
+        }
+        custom_buffer = NULL;
+        output->pb = custom_io;
+        output->flags |= AVFMT_FLAG_CUSTOM_IO;
+    } else if (!(output->oformat->flags & AVFMT_NOFILE)) {
         result = avio_open(&output->pb, output_path, AVIO_FLAG_WRITE);
         if (result < 0) {
             kmb_set_av_error(output_error, "Could not open the output path", result);
@@ -358,8 +411,13 @@ KmbResult kmb_remux_fragmented_mp4(
         "frag_keyframe+empty_moov+default_base_moof+negative_cts_offsets",
         0
     );
+    av_dict_set_int(&muxer_options, "frag_duration", fragment_duration_us, 0);
     result = avformat_write_header(output, &muxer_options);
     if (result < 0) {
+        if (write_state.cancelled) {
+            bridge_result = KMB_CANCELLED;
+            goto cleanup;
+        }
         kmb_set_av_error(output_error, "Could not write the fragmented MP4 header", result);
         bridge_result = KMB_WRITE_FAILED;
         goto cleanup;
@@ -388,6 +446,10 @@ KmbResult kmb_remux_fragmented_mp4(
         result = av_interleaved_write_frame(output, packet);
         av_packet_unref(packet);
         if (result < 0) {
+            if (write_state.cancelled) {
+                bridge_result = KMB_CANCELLED;
+                goto cleanup;
+            }
             kmb_set_av_error(output_error, "Could not write a media packet", result);
             bridge_result = KMB_WRITE_FAILED;
             goto cleanup;
@@ -400,20 +462,69 @@ KmbResult kmb_remux_fragmented_mp4(
     }
     result = av_write_trailer(output);
     if (result < 0) {
-        kmb_set_av_error(output_error, "Could not finalize fragmented MP4 output", result);
-        bridge_result = KMB_WRITE_FAILED;
+        if (write_state.cancelled) {
+            bridge_result = KMB_CANCELLED;
+        } else {
+            kmb_set_av_error(output_error, "Could not finalize fragmented MP4 output", result);
+            bridge_result = KMB_WRITE_FAILED;
+        }
     }
 
 cleanup:
     av_dict_free(&muxer_options);
     av_packet_free(&packet);
     av_freep(&stream_mapping);
-    if (output != NULL && !(output->oformat->flags & AVFMT_NOFILE)) {
+    if (custom_io != NULL) {
+        if (output != NULL) {
+            output->pb = NULL;
+        }
+        avio_context_free(&custom_io);
+    } else if (output != NULL && !(output->oformat->flags & AVFMT_NOFILE)) {
         avio_closep(&output->pb);
     }
+    av_freep(&custom_buffer);
     avformat_free_context(output);
     avformat_close_input(&input);
     return bridge_result;
+}
+
+KmbResult kmb_remux_fragmented_mp4(
+    const char *input_locator,
+    const char *output_path,
+    char **output_error
+) {
+    return kmb_remux_fragmented_mp4_internal(
+        input_locator,
+        output_path,
+        4000000,
+        0,
+        NULL,
+        NULL,
+        output_error
+    );
+}
+
+KmbResult kmb_remux_fragmented_mp4_stream(
+    const char *input_locator,
+    int64_t fragment_duration_us,
+    int64_t start_time_us,
+    KmbWriteCallback write_callback,
+    void *opaque,
+    char **output_error
+) {
+    if (write_callback == NULL) {
+        kmb_set_error(output_error, "An output callback is required.");
+        return KMB_INVALID_ARGUMENT;
+    }
+    return kmb_remux_fragmented_mp4_internal(
+        input_locator,
+        NULL,
+        fragment_duration_us,
+        start_time_us,
+        write_callback,
+        opaque,
+        output_error
+    );
 }
 
 void kmb_free_string(char *value) {

@@ -89,7 +89,7 @@ class FfmpegComplianceVerifierTest {
             ffmpegLicenseSpdx = "LGPL-2.1-or-later",
             ffmpegReportedLicense = "LGPL version 2.1 or later",
             configureArguments = compliantArguments,
-            ffmpegSourceArchiveUrl = "https://github.com/Shusek/KMediaBridge/releases/download/v0.1.0/ffmpeg-8.1.2.tar.xz",
+            ffmpegSourceArchiveUrl = "https://github.com/Shusek/KMediaBridge/releases/download/v0.2.0/ffmpeg-8.1.2.tar.xz",
             ffmpegSourceArchiveSha256 = sha256,
             nativeArtifactSha256 = sha256,
             buildRecipeUrl = "https://github.com/Shusek/KMediaBridge/tree/0123456789abcdef/native",
