@@ -42,6 +42,8 @@ configure_arguments=(
     "--enable-shared"
     "--disable-autodetect"
     "--disable-network"
+    # The bridge only probes/remuxes; avoiding an external assembler keeps the recipe self-contained.
+    "--disable-x86asm"
     "--disable-everything"
     "--disable-avdevice"
     "--disable-avfilter"
@@ -130,12 +132,13 @@ printf '%s\n' "${configure_arguments[@]}" > "$output_dir/compliance/ffmpeg-confi
 mkdir -p \
     "$output_dir/compliance/kmediabridge-source/native/include" \
     "$output_dir/compliance/kmediabridge-source/native/src" \
+    "$output_dir/compliance/kmediabridge-source/docs" \
     "$output_dir/compliance/kmediabridge-source/scripts"
 cp "$root_dir/LICENSE" "$output_dir/compliance/kmediabridge-source/LICENSE"
 cp "$root_dir/NOTICE" "$output_dir/compliance/kmediabridge-source/NOTICE"
 cp "$root_dir/THIRD_PARTY_NOTICES.md" "$output_dir/compliance/kmediabridge-source/THIRD_PARTY_NOTICES.md"
-cp "$root_dir/docs/COMPLIANCE.md" "$output_dir/compliance/kmediabridge-source/COMPLIANCE.md"
-cp "$root_dir/docs/RELINKING.md" "$output_dir/compliance/kmediabridge-source/RELINKING.md"
+cp "$root_dir/docs/COMPLIANCE.md" "$output_dir/compliance/kmediabridge-source/docs/COMPLIANCE.md"
+cp "$root_dir/docs/RELINKING.md" "$output_dir/compliance/kmediabridge-source/docs/RELINKING.md"
 cp "$root_dir/native/CMakeLists.txt" "$output_dir/compliance/kmediabridge-source/native/CMakeLists.txt"
 cp "$root_dir/native/build-ffmpeg-unix.sh" "$output_dir/compliance/kmediabridge-source/native/build-ffmpeg-unix.sh"
 cp "$root_dir/native/include/kmedia_bridge.h" "$output_dir/compliance/kmediabridge-source/native/include/kmedia_bridge.h"

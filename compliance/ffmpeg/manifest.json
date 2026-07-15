@@ -18,6 +18,7 @@
       "--enable-shared",
       "--disable-autodetect",
       "--disable-network",
+      "--disable-x86asm",
       "--disable-everything",
       "--disable-avdevice",
       "--disable-avfilter",
