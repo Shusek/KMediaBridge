@@ -53,6 +53,19 @@ kotlin {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
         }
+        jvmMain.dependencies {
+            implementation(libs.jna)
+            implementation(libs.kotlinx.serialization.json)
+        }
+        jvmTest.dependencies {
+            runtimeOnly(project(":ffmpeg-runtime-desktop"))
+        }
+    }
+}
+
+tasks.withType<Test>().configureEach {
+    providers.gradleProperty("kmediaBridgeTestMedia").orNull?.let { mediaPath ->
+        systemProperty("kmediabridge.testMedia", mediaPath)
     }
 }
 
@@ -80,7 +93,7 @@ mavenPublishing {
 
     pom {
         name.set("KMediaBridge FFmpeg Backend")
-        description.set("Optional, compliance-gated FFmpeg backend contracts for KMediaBridge.")
+        description.set("Optional compliance-gated FFmpeg backend and desktop JVM native loader for KMediaBridge.")
         inceptionYear.set("2026")
         url.set("https://github.com/Shusek/KMediaBridge")
 

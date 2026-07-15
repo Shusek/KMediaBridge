@@ -35,6 +35,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--version", required=True)
+    parser.add_argument("--runtime-resources", type=Path)
     arguments = parser.parse_args()
 
     root = Path(__file__).resolve().parent.parent
@@ -43,6 +44,8 @@ def main() -> int:
     project_version = arguments.version
     kotlin_version = version_from_catalog(catalog, "kotlin")
     coroutines_version = version_from_catalog(catalog, "coroutines")
+    serialization_version = version_from_catalog(catalog, "serialization")
+    jna_version = version_from_catalog(catalog, "jna")
     wrapper_properties = (root / "gradle/wrapper/gradle-wrapper.properties").read_text(encoding="utf-8")
     gradle_match = re.search(r"gradle-([0-9.]+)-bin\.zip", wrapper_properties)
     if gradle_match is None:
@@ -50,6 +53,22 @@ def main() -> int:
     gradle_version = gradle_match.group(1)
     wrapper_sha256 = hashlib.sha256((root / "gradle/wrapper/gradle-wrapper.jar").read_bytes()).hexdigest()
     ffmpeg = manifest["ffmpeg"]
+    runtime_manifest_path = (
+        arguments.runtime_resources / "META-INF/kmediabridge/compliance/manifest.json"
+        if arguments.runtime_resources is not None
+        else None
+    )
+    runtime_manifest = (
+        json.loads(runtime_manifest_path.read_text(encoding="utf-8"))
+        if runtime_manifest_path is not None and runtime_manifest_path.is_file()
+        else None
+    )
+    distribution_status = "binary" if runtime_manifest is not None else "source-only"
+    ffmpeg_source_url = (
+        runtime_manifest["ffmpeg"]["sourceOfferUrl"]
+        if runtime_manifest is not None
+        else ffmpeg["sourceUrl"]
+    )
 
     bom = {
         "bomFormat": "CycloneDX",
@@ -68,6 +87,12 @@ def main() -> int:
         "components": [
             component("kmedia-bridge-api", project_version, "LGPL-2.1-or-later"),
             component("kmedia-bridge-ffmpeg", project_version, "LGPL-2.1-or-later", "optional"),
+            component(
+                "kmedia-bridge-ffmpeg-runtime-desktop",
+                project_version,
+                "LGPL-2.1-or-later",
+                "optional",
+            ),
             {
                 "type": "framework",
                 "bom-ref": f"pkg:maven/org.jetbrains.kotlin/kotlin-stdlib@{kotlin_version}",
@@ -76,6 +101,27 @@ def main() -> int:
                 "version": kotlin_version,
                 "scope": "required",
                 "licenses": [{"license": {"id": "Apache-2.0"}}],
+            },
+            {
+                "type": "library",
+                "bom-ref": f"pkg:maven/org.jetbrains.kotlinx/kotlinx-serialization-json@{serialization_version}",
+                "group": "org.jetbrains.kotlinx",
+                "name": "kotlinx-serialization-json",
+                "version": serialization_version,
+                "scope": "optional",
+                "licenses": [{"license": {"id": "Apache-2.0"}}],
+            },
+            {
+                "type": "library",
+                "bom-ref": f"pkg:maven/net.java.dev.jna/jna@{jna_version}",
+                "group": "net.java.dev.jna",
+                "name": "jna",
+                "version": jna_version,
+                "scope": "optional",
+                "licenses": [{"license": {"id": "LGPL-2.1-or-later"}}],
+                "externalReferences": [
+                    {"type": "vcs", "url": "https://github.com/java-native-access/jna"}
+                ],
             },
             {
                 "type": "library",
@@ -91,11 +137,17 @@ def main() -> int:
                 "bom-ref": f"pkg:generic/ffmpeg@{ffmpeg['version']}",
                 "name": "FFmpeg",
                 "version": ffmpeg["version"],
-                "scope": "excluded",
+                "scope": "optional" if runtime_manifest is not None else "excluded",
                 "hashes": [{"alg": "SHA-256", "content": ffmpeg["sourceSha256"]}],
                 "licenses": [{"license": {"id": ffmpeg["license"]}}],
-                "externalReferences": [{"type": "distribution", "url": ffmpeg["sourceUrl"]}],
-                "properties": [{"name": "kmediabridge:distributionStatus", "value": "source-only"}],
+                "externalReferences": [{"type": "distribution", "url": ffmpeg_source_url}],
+                "properties": [
+                    {"name": "kmediabridge:distributionStatus", "value": distribution_status},
+                    {
+                        "name": "kmediabridge:nativePayloadCount",
+                        "value": str(len(runtime_manifest.get("nativePayloads", []))) if runtime_manifest else "0",
+                    },
+                ],
             },
             {
                 "type": "application",

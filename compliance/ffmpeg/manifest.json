@@ -42,6 +42,11 @@
     "gradle/wrapper/LICENSE",
     "docs/COMPLIANCE.md",
     "docs/RELINKING.md",
+    "native/build-ffmpeg-unix.sh",
+    "native/build-ffmpeg-windows-x64.sh",
+    "scripts/package_native_runtime.py",
+    "scripts/assemble_runtime_manifest.py",
+    "scripts/verify_ffmpeg_release.sh",
     "compliance/ffmpeg/manifest.json"
   ]
 }

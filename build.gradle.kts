@@ -11,7 +11,7 @@ plugins {
     alias(libs.plugins.ktlint)
 }
 
-val publicationVersion = providers.gradleProperty("publicationVersion").orElse("0.1.0-SNAPSHOT")
+val publicationVersion = providers.gradleProperty("publicationVersion").orElse("0.2.0-SNAPSHOT")
 val pythonExecutable = if (System.getProperty("os.name").startsWith("Windows")) "python" else "python3"
 
 allprojects {
@@ -24,6 +24,7 @@ ktlint {
 }
 
 val complianceOutput = layout.buildDirectory.file("reports/compliance/sbom.cdx.json")
+val nativePayloadDirectory = providers.gradleProperty("nativePayloadDirectory")
 
 val generateComplianceSbom =
     tasks.register<Exec>("generateComplianceSbom") {
@@ -34,15 +35,21 @@ val generateComplianceSbom =
             layout.projectDirectory.file("gradle/libs.versions.toml"),
             layout.projectDirectory.file("scripts/generate_sbom.py"),
         )
+        nativePayloadDirectory.orNull?.let { inputs.dir(it) }
         outputs.file(complianceOutput)
-        commandLine(
-            pythonExecutable,
-            "scripts/generate_sbom.py",
-            "--output",
-            complianceOutput.get().asFile.absolutePath,
-            "--version",
-            publicationVersion.get(),
-        )
+        val arguments =
+            mutableListOf(
+                pythonExecutable,
+                "scripts/generate_sbom.py",
+                "--output",
+                complianceOutput.get().asFile.absolutePath,
+                "--version",
+                publicationVersion.get(),
+            )
+        nativePayloadDirectory.orNull?.let { directory ->
+            arguments += listOf("--runtime-resources", directory)
+        }
+        commandLine(arguments)
     }
 
 val verifyCompliance =
@@ -53,6 +60,7 @@ val verifyCompliance =
             fileTree(layout.projectDirectory) {
                 include("api/src/**")
                 include("ffmpeg/src/**")
+                include("ffmpeg-runtime-desktop/src/**")
                 include("native/**")
                 include("scripts/**")
                 include("compliance/**")
@@ -76,6 +84,7 @@ val verifyPublications =
         dependsOn(
             ":api:publishAllPublicationsToComplianceRepository",
             ":ffmpeg:publishAllPublicationsToComplianceRepository",
+            ":ffmpeg-runtime-desktop:publishAllPublicationsToComplianceRepository",
         )
         inputs.dir(layout.buildDirectory.dir("compliance-repository"))
         commandLine(
@@ -90,7 +99,7 @@ val verifyPublications =
     }
 
 tasks.named("check") {
-    dependsOn(":api:check", ":ffmpeg:check")
+    dependsOn(":api:check", ":ffmpeg:check", ":ffmpeg-runtime-desktop:check")
     dependsOn(verifyCompliance)
     dependsOn(generateComplianceSbom)
 }

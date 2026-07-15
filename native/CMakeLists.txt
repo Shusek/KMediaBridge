@@ -21,7 +21,7 @@ set_target_properties(
     PROPERTIES
         C_VISIBILITY_PRESET hidden
         VISIBILITY_INLINES_HIDDEN YES
-        VERSION 0.1.0
+        VERSION 0.2.0
         SOVERSION 1
 )
 
