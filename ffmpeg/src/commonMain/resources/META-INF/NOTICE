@@ -1,0 +1,11 @@
+KMediaBridge
+Copyright (c) 2026 Shusek
+
+KMediaBridge is licensed under the GNU Lesser General Public License,
+version 2.1 or (at your option) any later version.
+
+The repository contains an optional integration boundary for FFmpeg. The
+initial source release does not redistribute an FFmpeg binary. Any release
+that starts carrying native FFmpeg libraries must also carry the exact
+corresponding source, build recipe, configuration, notices, and checksums
+required by docs/COMPLIANCE.md.

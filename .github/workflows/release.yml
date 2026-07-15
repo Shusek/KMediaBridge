@@ -1,0 +1,109 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publish Kotlin artifacts
+    runs-on: macos-14
+    steps:
+      - name: Check out the immutable tag
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+      - name: Set up Java
+        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: Validate stable version
+        id: version
+        shell: bash
+        run: |
+          tag="$GITHUB_REF_NAME"
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Only stable vMAJOR.MINOR.PATCH tags may publish." >&2
+            exit 1
+          fi
+          echo "value=${tag#v}" >> "$GITHUB_OUTPUT"
+      - name: Run all release gates
+        run: >-
+          ./gradlew --no-daemon check complianceCheck
+          -PpublicationVersion=${{ steps.version.outputs.value }}
+      - name: Rebuild and inspect the LGPL native boundary
+        run: ./native/build-ffmpeg-unix.sh "$RUNNER_TEMP/native-work" "$RUNNER_TEMP/native-dist"
+      - name: Prepare the version-preserving Pages repository
+        id: pages
+        shell: bash
+        run: |
+          pages_dir="$RUNNER_TEMP/gh-pages"
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git fetch origin gh-pages:refs/remotes/origin/gh-pages
+            git worktree add --detach "$pages_dir" origin/gh-pages
+          else
+            git worktree add --detach "$pages_dir" HEAD
+            git -C "$pages_dir" checkout --orphan gh-pages
+            git -C "$pages_dir" rm -rf .
+          fi
+          cp -R site/. "$pages_dir/"
+          touch "$pages_dir/.nojekyll"
+          echo "directory=$pages_dir" >> "$GITHUB_OUTPUT"
+      - name: Publish Maven repository to the Pages worktree
+        run: >-
+          ./gradlew --no-daemon
+          :api:publishAllPublicationsToGithubPagesRepository
+          :ffmpeg:publishAllPublicationsToGithubPagesRepository
+          -PpublicationVersion=${{ steps.version.outputs.value }}
+          -PgithubPagesMavenRepository=${{ steps.pages.outputs.directory }}/maven
+      - name: Push the immutable Maven version
+        shell: bash
+        run: |
+          pages_dir="${{ steps.pages.outputs.directory }}"
+          git -C "$pages_dir" config user.name "github-actions[bot]"
+          git -C "$pages_dir" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$pages_dir" add --all
+          if ! git -C "$pages_dir" diff --cached --quiet; then
+            git -C "$pages_dir" commit -m "Publish ${{ github.ref_name }}"
+            git -C "$pages_dir" push origin HEAD:gh-pages
+          fi
+      - name: Assemble source compliance evidence
+        id: evidence
+        shell: bash
+        run: |
+          version="${{ steps.version.outputs.value }}"
+          sbom="$RUNNER_TEMP/kmedia-bridge-$version-sbom.cdx.json"
+          bundle="$RUNNER_TEMP/kmedia-bridge-$version-compliance.tar.gz"
+          cp build/reports/compliance/sbom.cdx.json "$sbom"
+          tar -czf "$bundle" \
+            LICENSE \
+            NOTICE \
+            THIRD_PARTY_NOTICES.md \
+            docs \
+            compliance \
+            native \
+            scripts
+          echo "sbom=$sbom" >> "$GITHUB_OUTPUT"
+          echo "bundle=$bundle" >> "$GITHUB_OUTPUT"
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "${{ github.ref_name }}"
+          "${{ steps.evidence.outputs.sbom }}"
+          "${{ steps.evidence.outputs.bundle }}"
+          --verify-tag
+          --generate-notes
+          --title "KMediaBridge ${{ steps.version.outputs.value }}"

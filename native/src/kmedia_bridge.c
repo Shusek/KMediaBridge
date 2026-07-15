@@ -1,0 +1,421 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+
+#include "kmedia_bridge.h"
+
+#include <libavcodec/avcodec.h>
+#include <libavcodec/codec_par.h>
+#include <libavcodec/packet.h>
+#include <libavformat/avformat.h>
+#include <libavutil/avstring.h>
+#include <libavutil/avutil.h>
+#include <libavutil/bprint.h>
+#include <libavutil/dovi_meta.h>
+#include <libavutil/error.h>
+#include <libavutil/mem.h>
+#include <libavutil/pixdesc.h>
+
+#include <stddef.h>
+#include <string.h>
+
+static void kmb_set_error(char **output_error, const char *message) {
+    if (output_error == NULL) {
+        return;
+    }
+    *output_error = av_strdup(message != NULL ? message : "Unknown media bridge error.");
+}
+
+static void kmb_set_av_error(char **output_error, const char *operation, int error_code) {
+    char error_text[AV_ERROR_MAX_STRING_SIZE] = {0};
+    char combined[256] = {0};
+    av_strerror(error_code, error_text, sizeof(error_text));
+    av_strlcpy(combined, operation, sizeof(combined));
+    av_strlcat(combined, ": ", sizeof(combined));
+    av_strlcat(combined, error_text, sizeof(combined));
+    kmb_set_error(output_error, combined);
+}
+
+static void kmb_json_string(AVBPrint *output, const char *value) {
+    const unsigned char *cursor = (const unsigned char *)(value != NULL ? value : "unknown");
+    av_bprint_chars(output, '"', 1);
+    while (*cursor != '\0') {
+        switch (*cursor) {
+            case '"':
+                av_bprintf(output, "\\\"");
+                break;
+            case '\\':
+                av_bprintf(output, "\\\\");
+                break;
+            case '\b':
+                av_bprintf(output, "\\b");
+                break;
+            case '\f':
+                av_bprintf(output, "\\f");
+                break;
+            case '\n':
+                av_bprintf(output, "\\n");
+                break;
+            case '\r':
+                av_bprintf(output, "\\r");
+                break;
+            case '\t':
+                av_bprintf(output, "\\t");
+                break;
+            default:
+                if (*cursor < 0x20) {
+                    av_bprintf(output, "\\u%04x", *cursor);
+                } else {
+                    av_bprint_chars(output, (char)*cursor, 1);
+                }
+                break;
+        }
+        cursor++;
+    }
+    av_bprint_chars(output, '"', 1);
+}
+
+static const char *kmb_dynamic_range(const AVCodecParameters *parameters) {
+    const AVPacketSideData *dolby_vision = av_packet_side_data_get(
+        parameters->coded_side_data,
+        parameters->nb_coded_side_data,
+        AV_PKT_DATA_DOVI_CONF
+    );
+    const AVPacketSideData *hdr10_plus = av_packet_side_data_get(
+        parameters->coded_side_data,
+        parameters->nb_coded_side_data,
+        AV_PKT_DATA_DYNAMIC_HDR10_PLUS
+    );
+    if (dolby_vision != NULL) {
+        return "DOLBY_VISION";
+    }
+    if (hdr10_plus != NULL) {
+        return "HDR10_PLUS";
+    }
+    if (parameters->color_trc == AVCOL_TRC_SMPTE2084) {
+        return "HDR10";
+    }
+    if (parameters->color_trc == AVCOL_TRC_ARIB_STD_B67) {
+        return "HLG";
+    }
+    if (parameters->color_trc == AVCOL_TRC_BT709 || parameters->color_trc == AVCOL_TRC_IEC61966_2_1) {
+        return "SDR";
+    }
+    return "UNKNOWN";
+}
+
+static int kmb_bit_depth(const AVCodecParameters *parameters) {
+    const AVPixFmtDescriptor *descriptor = NULL;
+    if (parameters->bits_per_raw_sample > 0) {
+        return parameters->bits_per_raw_sample;
+    }
+    if (parameters->format >= 0) {
+        descriptor = av_pix_fmt_desc_get((enum AVPixelFormat)parameters->format);
+    }
+    return descriptor != NULL ? descriptor->comp[0].depth : 0;
+}
+
+static void kmb_append_video_track(AVBPrint *output, const AVStream *stream) {
+    const AVCodecParameters *parameters = stream->codecpar;
+    const AVPacketSideData *hdr10_plus = av_packet_side_data_get(
+        parameters->coded_side_data,
+        parameters->nb_coded_side_data,
+        AV_PKT_DATA_DYNAMIC_HDR10_PLUS
+    );
+    const AVPacketSideData *dolby_vision = av_packet_side_data_get(
+        parameters->coded_side_data,
+        parameters->nb_coded_side_data,
+        AV_PKT_DATA_DOVI_CONF
+    );
+    const AVDOVIDecoderConfigurationRecord *dovi =
+        dolby_vision != NULL && dolby_vision->size >= sizeof(AVDOVIDecoderConfigurationRecord)
+            ? (const AVDOVIDecoderConfigurationRecord *)dolby_vision->data
+            : NULL;
+    const AVRational frame_rate = stream->avg_frame_rate;
+
+    av_bprintf(output, "{\"type\":\"video\",\"id\":%d,\"codec\":", stream->index);
+    kmb_json_string(output, avcodec_get_name(parameters->codec_id));
+    av_bprintf(
+        output,
+        ",\"profile\":%d,\"level\":%d,\"width\":%d,\"height\":%d,\"bitDepth\":%d",
+        parameters->profile,
+        parameters->level,
+        parameters->width,
+        parameters->height,
+        kmb_bit_depth(parameters)
+    );
+    av_bprintf(output, ",\"dynamicRange\":");
+    kmb_json_string(output, kmb_dynamic_range(parameters));
+    av_bprintf(output, ",\"colorRange\":");
+    kmb_json_string(output, av_color_range_name(parameters->color_range));
+    av_bprintf(output, ",\"colorPrimaries\":");
+    kmb_json_string(output, av_color_primaries_name(parameters->color_primaries));
+    av_bprintf(output, ",\"colorTransfer\":");
+    kmb_json_string(output, av_color_transfer_name(parameters->color_trc));
+    av_bprintf(output, ",\"colorMatrix\":");
+    kmb_json_string(output, av_color_space_name(parameters->color_space));
+    av_bprintf(
+        output,
+        ",\"frameRateNumerator\":%d,\"frameRateDenominator\":%d,\"hasHdr10PlusMetadata\":%s",
+        frame_rate.num,
+        frame_rate.den,
+        hdr10_plus != NULL ? "true" : "false"
+    );
+    if (dovi != NULL) {
+        av_bprintf(
+            output,
+            ",\"dolbyVision\":{\"profile\":%u,\"level\":%u,\"hasRpu\":%s,\"hasEnhancementLayer\":%s}",
+            dovi->dv_profile,
+            dovi->dv_level,
+            dovi->rpu_present_flag ? "true" : "false",
+            dovi->el_present_flag ? "true" : "false"
+        );
+    } else {
+        av_bprintf(output, ",\"dolbyVision\":null");
+    }
+    av_bprintf(output, "}");
+}
+
+static void kmb_append_audio_track(AVBPrint *output, const AVStream *stream) {
+    const AVCodecParameters *parameters = stream->codecpar;
+    av_bprintf(output, "{\"type\":\"audio\",\"id\":%d,\"codec\":", stream->index);
+    kmb_json_string(output, avcodec_get_name(parameters->codec_id));
+    av_bprintf(
+        output,
+        ",\"channels\":%d,\"sampleRateHz\":%d}",
+        parameters->ch_layout.nb_channels,
+        parameters->sample_rate
+    );
+}
+
+uint32_t kmb_abi_version(void) {
+    return KMB_ABI_VERSION;
+}
+
+const char *kmb_ffmpeg_version(void) {
+    return av_version_info();
+}
+
+const char *kmb_ffmpeg_license(void) {
+    return avutil_license();
+}
+
+const char *kmb_ffmpeg_configuration(void) {
+    return avformat_configuration();
+}
+
+KmbResult kmb_probe_json(const char *input_locator, char **output_json, char **output_error) {
+    AVFormatContext *input = NULL;
+    AVBPrint json;
+    unsigned int index = 0;
+    int appended = 0;
+    int result = 0;
+
+    if (output_json != NULL) {
+        *output_json = NULL;
+    }
+    if (output_error != NULL) {
+        *output_error = NULL;
+    }
+    if (input_locator == NULL || output_json == NULL) {
+        kmb_set_error(output_error, "Input and output pointers are required.");
+        return KMB_INVALID_ARGUMENT;
+    }
+
+    result = avformat_open_input(&input, input_locator, NULL, NULL);
+    if (result < 0) {
+        kmb_set_av_error(output_error, "Could not open media input", result);
+        return KMB_OPEN_INPUT_FAILED;
+    }
+    result = avformat_find_stream_info(input, NULL);
+    if (result < 0) {
+        kmb_set_av_error(output_error, "Could not read media stream information", result);
+        avformat_close_input(&input);
+        return KMB_STREAM_INFO_FAILED;
+    }
+
+    av_bprint_init(&json, 1024, AV_BPRINT_SIZE_UNLIMITED);
+    av_bprintf(&json, "{\"format\":");
+    kmb_json_string(&json, input->iformat != NULL ? input->iformat->name : "unknown");
+    if (input->duration == AV_NOPTS_VALUE) {
+        av_bprintf(&json, ",\"durationUs\":null,\"tracks\":[");
+    } else {
+        av_bprintf(&json, ",\"durationUs\":%lld,\"tracks\":[", (long long)input->duration);
+    }
+
+    for (index = 0; index < input->nb_streams; index++) {
+        const AVStream *stream = input->streams[index];
+        if (stream->codecpar->codec_type != AVMEDIA_TYPE_VIDEO &&
+            stream->codecpar->codec_type != AVMEDIA_TYPE_AUDIO) {
+            continue;
+        }
+        if (appended) {
+            av_bprint_chars(&json, ',', 1);
+        }
+        if (stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+            kmb_append_video_track(&json, stream);
+        } else {
+            kmb_append_audio_track(&json, stream);
+        }
+        appended = 1;
+    }
+    av_bprintf(&json, "]}");
+
+    result = av_bprint_finalize(&json, output_json);
+    avformat_close_input(&input);
+    if (result < 0 || *output_json == NULL) {
+        kmb_set_error(output_error, "Could not allocate the probe result.");
+        return KMB_ALLOCATION_FAILED;
+    }
+    return KMB_OK;
+}
+
+KmbResult kmb_remux_fragmented_mp4(
+    const char *input_locator,
+    const char *output_path,
+    char **output_error
+) {
+    AVFormatContext *input = NULL;
+    AVFormatContext *output = NULL;
+    AVPacket *packet = NULL;
+    AVDictionary *muxer_options = NULL;
+    int *stream_mapping = NULL;
+    int output_stream_count = 0;
+    int result = 0;
+    unsigned int index = 0;
+    KmbResult bridge_result = KMB_OK;
+
+    if (output_error != NULL) {
+        *output_error = NULL;
+    }
+    if (input_locator == NULL || output_path == NULL) {
+        kmb_set_error(output_error, "Input and output paths are required.");
+        return KMB_INVALID_ARGUMENT;
+    }
+
+    result = avformat_open_input(&input, input_locator, NULL, NULL);
+    if (result < 0) {
+        kmb_set_av_error(output_error, "Could not open media input", result);
+        return KMB_OPEN_INPUT_FAILED;
+    }
+    result = avformat_find_stream_info(input, NULL);
+    if (result < 0) {
+        kmb_set_av_error(output_error, "Could not read media stream information", result);
+        bridge_result = KMB_STREAM_INFO_FAILED;
+        goto cleanup;
+    }
+    result = avformat_alloc_output_context2(&output, NULL, "mp4", output_path);
+    if (result < 0 || output == NULL) {
+        kmb_set_av_error(output_error, "Could not create fragmented MP4 output", result);
+        bridge_result = KMB_OPEN_OUTPUT_FAILED;
+        goto cleanup;
+    }
+
+    stream_mapping = av_calloc(input->nb_streams, sizeof(*stream_mapping));
+    if (stream_mapping == NULL) {
+        kmb_set_error(output_error, "Could not allocate stream mapping.");
+        bridge_result = KMB_ALLOCATION_FAILED;
+        goto cleanup;
+    }
+    for (index = 0; index < input->nb_streams; index++) {
+        const AVStream *input_stream = input->streams[index];
+        AVStream *output_stream = NULL;
+        stream_mapping[index] = -1;
+        if (input_stream->codecpar->codec_type != AVMEDIA_TYPE_VIDEO &&
+            input_stream->codecpar->codec_type != AVMEDIA_TYPE_AUDIO) {
+            continue;
+        }
+        output_stream = avformat_new_stream(output, NULL);
+        if (output_stream == NULL) {
+            kmb_set_error(output_error, "Could not create an output stream.");
+            bridge_result = KMB_ALLOCATION_FAILED;
+            goto cleanup;
+        }
+        stream_mapping[index] = output_stream_count++;
+        result = avcodec_parameters_copy(output_stream->codecpar, input_stream->codecpar);
+        if (result < 0) {
+            kmb_set_av_error(output_error, "Could not copy stream parameters", result);
+            bridge_result = KMB_WRITE_FAILED;
+            goto cleanup;
+        }
+        output_stream->codecpar->codec_tag = 0;
+        if (output_stream->codecpar->codec_id == AV_CODEC_ID_HEVC) {
+            output_stream->codecpar->codec_tag = MKTAG('h', 'v', 'c', '1');
+        }
+        output_stream->time_base = input_stream->time_base;
+    }
+
+    if (!(output->oformat->flags & AVFMT_NOFILE)) {
+        result = avio_open(&output->pb, output_path, AVIO_FLAG_WRITE);
+        if (result < 0) {
+            kmb_set_av_error(output_error, "Could not open the output path", result);
+            bridge_result = KMB_OPEN_OUTPUT_FAILED;
+            goto cleanup;
+        }
+    }
+
+    av_dict_set(
+        &muxer_options,
+        "movflags",
+        "frag_keyframe+empty_moov+default_base_moof+negative_cts_offsets",
+        0
+    );
+    result = avformat_write_header(output, &muxer_options);
+    if (result < 0) {
+        kmb_set_av_error(output_error, "Could not write the fragmented MP4 header", result);
+        bridge_result = KMB_WRITE_FAILED;
+        goto cleanup;
+    }
+
+    packet = av_packet_alloc();
+    if (packet == NULL) {
+        kmb_set_error(output_error, "Could not allocate a media packet.");
+        bridge_result = KMB_ALLOCATION_FAILED;
+        goto cleanup;
+    }
+
+    while ((result = av_read_frame(input, packet)) >= 0) {
+        AVStream *input_stream = NULL;
+        AVStream *output_stream = NULL;
+        const int mapped_index = stream_mapping[packet->stream_index];
+        if (mapped_index < 0) {
+            av_packet_unref(packet);
+            continue;
+        }
+        input_stream = input->streams[packet->stream_index];
+        output_stream = output->streams[mapped_index];
+        packet->stream_index = mapped_index;
+        av_packet_rescale_ts(packet, input_stream->time_base, output_stream->time_base);
+        packet->pos = -1;
+        result = av_interleaved_write_frame(output, packet);
+        av_packet_unref(packet);
+        if (result < 0) {
+            kmb_set_av_error(output_error, "Could not write a media packet", result);
+            bridge_result = KMB_WRITE_FAILED;
+            goto cleanup;
+        }
+    }
+    if (result != AVERROR_EOF) {
+        kmb_set_av_error(output_error, "Could not read a media packet", result);
+        bridge_result = KMB_READ_FAILED;
+        goto cleanup;
+    }
+    result = av_write_trailer(output);
+    if (result < 0) {
+        kmb_set_av_error(output_error, "Could not finalize fragmented MP4 output", result);
+        bridge_result = KMB_WRITE_FAILED;
+    }
+
+cleanup:
+    av_dict_free(&muxer_options);
+    av_packet_free(&packet);
+    av_freep(&stream_mapping);
+    if (output != NULL && !(output->oformat->flags & AVFMT_NOFILE)) {
+        avio_closep(&output->pb);
+    }
+    avformat_free_context(output);
+    avformat_close_input(&input);
+    return bridge_result;
+}
+
+void kmb_free_string(char *value) {
+    av_free(value);
+}

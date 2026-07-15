@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "projectLicense": "LGPL-2.1-or-later",
+  "distributionStatus": "source-only",
+  "ffmpeg": {
+    "version": "8.1.2",
+    "license": "LGPL-2.1-or-later",
+    "linkage": "dynamic",
+    "sourceUrl": "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz",
+    "sourceSha256": "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c",
+    "configureArguments": [
+      "--disable-gpl",
+      "--disable-nonfree",
+      "--disable-programs",
+      "--disable-doc",
+      "--disable-debug",
+      "--disable-static",
+      "--enable-shared",
+      "--disable-autodetect",
+      "--disable-network",
+      "--disable-everything",
+      "--disable-avdevice",
+      "--disable-avfilter",
+      "--disable-swresample",
+      "--disable-swscale",
+      "--enable-avutil",
+      "--enable-avcodec",
+      "--enable-avformat",
+      "--enable-demuxer=matroska,mov,mpegts",
+      "--enable-muxer=mp4",
+      "--enable-protocol=file",
+      "--enable-parser=aac,h264,hevc,opus",
+      "--enable-bsf=aac_adtstoasc,extract_extradata,hevc_metadata"
+    ]
+  },
+  "nativePayloads": [],
+  "requiredDistributionFiles": [
+    "LICENSE",
+    "NOTICE",
+    "THIRD_PARTY_NOTICES.md",
+    "gradle/wrapper/LICENSE",
+    "docs/COMPLIANCE.md",
+    "docs/RELINKING.md",
+    "compliance/ffmpeg/manifest.json"
+  ]
+}
