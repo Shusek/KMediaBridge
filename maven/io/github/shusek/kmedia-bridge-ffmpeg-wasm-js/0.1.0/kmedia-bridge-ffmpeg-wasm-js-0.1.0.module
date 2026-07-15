@@ -1,0 +1,130 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../kmedia-bridge-ffmpeg/0.1.0/kmedia-bridge-ffmpeg-0.1.0.module",
+    "group": "io.github.shusek",
+    "module": "kmedia-bridge-ffmpeg",
+    "version": "0.1.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.6.1"
+    }
+  },
+  "variants": [
+    {
+      "name": "wasmJsApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "dependencies": [
+        {
+          "group": "io.github.shusek",
+          "module": "kmedia-bridge-api",
+          "version": {
+            "requires": "0.1.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "ffmpeg-wasm-js-0.1.0.klib",
+          "url": "kmedia-bridge-ffmpeg-wasm-js-0.1.0.klib",
+          "size": 34446,
+          "sha512": "e8da31c2d0268b11e8a421e64c33613c4090b312069ce8598422b767ff2f6c36396ebf353c13e2237db9e11580bac844e2e9037fafe5729c6bfb399bab873368",
+          "sha256": "5a1bed1f3a2936a81bb92924905d03e425c05698eb8999189f35f293c8acba7e",
+          "sha1": "836ad716516281be250d3bb7f1bf722a372cd4e8",
+          "md5": "bc52c308e22d20afd0b73eec3ac540d0"
+        }
+      ]
+    },
+    {
+      "name": "wasmJsRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "dependencies": [
+        {
+          "group": "io.github.shusek",
+          "module": "kmedia-bridge-api",
+          "version": {
+            "requires": "0.1.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "ffmpeg-wasm-js-0.1.0.klib",
+          "url": "kmedia-bridge-ffmpeg-wasm-js-0.1.0.klib",
+          "size": 34446,
+          "sha512": "e8da31c2d0268b11e8a421e64c33613c4090b312069ce8598422b767ff2f6c36396ebf353c13e2237db9e11580bac844e2e9037fafe5729c6bfb399bab873368",
+          "sha256": "5a1bed1f3a2936a81bb92924905d03e425c05698eb8999189f35f293c8acba7e",
+          "sha1": "836ad716516281be250d3bb7f1bf722a372cd4e8",
+          "md5": "bc52c308e22d20afd0b73eec3ac540d0"
+        }
+      ]
+    },
+    {
+      "name": "wasmJsSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "files": [
+        {
+          "name": "ffmpeg-wasm-js-0.1.0-sources.jar",
+          "url": "kmedia-bridge-ffmpeg-wasm-js-0.1.0-sources.jar",
+          "size": 4565,
+          "sha512": "8511876b04ef7c0b298058fb9c805a19e9e982afb66836178caaf0b0e2ded2aa2d61274b4fba22eab23634cf78e859b25869c464a4efe4f1514178cc14a19601",
+          "sha256": "4f8c2d18d6f27e16f57124b5056670819545d1340b7de31c9ad5f367ef33cf9d",
+          "sha1": "8ae7ee13937f6d3519849b1b61aef0ae5c8eceed",
+          "md5": "84b855ec3ae4794e9ecc9ea55a8df10b"
+        }
+      ]
+    }
+  ]
+}

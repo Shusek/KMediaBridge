@@ -1,0 +1,130 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../kmedia-bridge-ffmpeg/0.1.0/kmedia-bridge-ffmpeg-0.1.0.module",
+    "group": "io.github.shusek",
+    "module": "kmedia-bridge-ffmpeg",
+    "version": "0.1.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.6.1"
+    }
+  },
+  "variants": [
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "io.github.shusek",
+          "module": "kmedia-bridge-api",
+          "version": {
+            "requires": "0.1.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "ffmpeg-jvm-0.1.0.jar",
+          "url": "kmedia-bridge-ffmpeg-jvm-0.1.0.jar",
+          "size": 31151,
+          "sha512": "43e065eae2d9b453b33ece7de2e6f61a7c51db1c461e15ea582cd164b9241cc86ac07a3b28d64ee86103c6f453842e2c812bf70ebe58dd453ac1bd0aa10e2da1",
+          "sha256": "b56a0a90d912bfdc3f045d9680c9a2695328115c44b76695f1492bb606a2eabd",
+          "sha1": "4254e4bff318912b31decd342740af957d17b002",
+          "md5": "8e51dde6af0980444cbaf627baeba0ce"
+        }
+      ]
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "io.github.shusek",
+          "module": "kmedia-bridge-api",
+          "version": {
+            "requires": "0.1.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "ffmpeg-jvm-0.1.0.jar",
+          "url": "kmedia-bridge-ffmpeg-jvm-0.1.0.jar",
+          "size": 31151,
+          "sha512": "43e065eae2d9b453b33ece7de2e6f61a7c51db1c461e15ea582cd164b9241cc86ac07a3b28d64ee86103c6f453842e2c812bf70ebe58dd453ac1bd0aa10e2da1",
+          "sha256": "b56a0a90d912bfdc3f045d9680c9a2695328115c44b76695f1492bb606a2eabd",
+          "sha1": "4254e4bff318912b31decd342740af957d17b002",
+          "md5": "8e51dde6af0980444cbaf627baeba0ce"
+        }
+      ]
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "files": [
+        {
+          "name": "ffmpeg-jvm-0.1.0-sources.jar",
+          "url": "kmedia-bridge-ffmpeg-jvm-0.1.0-sources.jar",
+          "size": 4565,
+          "sha512": "8511876b04ef7c0b298058fb9c805a19e9e982afb66836178caaf0b0e2ded2aa2d61274b4fba22eab23634cf78e859b25869c464a4efe4f1514178cc14a19601",
+          "sha256": "4f8c2d18d6f27e16f57124b5056670819545d1340b7de31c9ad5f367ef33cf9d",
+          "sha1": "8ae7ee13937f6d3519849b1b61aef0ae5c8eceed",
+          "md5": "84b855ec3ae4794e9ecc9ea55a8df10b"
+        }
+      ]
+    }
+  ]
+}

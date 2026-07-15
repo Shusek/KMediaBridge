@@ -1,0 +1,116 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../kmedia-bridge-api/0.1.0/kmedia-bridge-api-0.1.0.module",
+    "group": "io.github.shusek",
+    "module": "kmedia-bridge-api",
+    "version": "0.1.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.6.1"
+    }
+  },
+  "variants": [
+    {
+      "name": "wasmJsApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "api-wasm-js-0.1.0.klib",
+          "url": "kmedia-bridge-api-wasm-js-0.1.0.klib",
+          "size": 52675,
+          "sha512": "da87e017135581edade7526a8772b55d5e887fc7e3baeb2a52c2428df222b99526651c5383d2266eb8cfd63224c09aff2569f2116ce86353f8d233e14121e003",
+          "sha256": "13a479366312d0ce5864c8d588532a09800f8b28774cbaa65361acf8973e2917",
+          "sha1": "86852866d3c019907d56820944dd7cc36287c743",
+          "md5": "a023505bdc8f5c2fa22a0fafd1c66587"
+        }
+      ]
+    },
+    {
+      "name": "wasmJsRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "api-wasm-js-0.1.0.klib",
+          "url": "kmedia-bridge-api-wasm-js-0.1.0.klib",
+          "size": 52675,
+          "sha512": "da87e017135581edade7526a8772b55d5e887fc7e3baeb2a52c2428df222b99526651c5383d2266eb8cfd63224c09aff2569f2116ce86353f8d233e14121e003",
+          "sha256": "13a479366312d0ce5864c8d588532a09800f8b28774cbaa65361acf8973e2917",
+          "sha1": "86852866d3c019907d56820944dd7cc36287c743",
+          "md5": "a023505bdc8f5c2fa22a0fafd1c66587"
+        }
+      ]
+    },
+    {
+      "name": "wasmJsSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "files": [
+        {
+          "name": "api-wasm-js-0.1.0-sources.jar",
+          "url": "kmedia-bridge-api-wasm-js-0.1.0-sources.jar",
+          "size": 3992,
+          "sha512": "530501b265594bdc79ab3001505879f574b5f88d1251c56f51b529853419b27a8fcb0a9ba44ec72b3ade33a3f820e2f1ed18ad6c6e9bd0e2f5fdee8756f313e3",
+          "sha256": "37dc5909d9cab42d9ee8ce058a29533fa32ad5f9afea2112e9a4b75f17d0cdd5",
+          "sha1": "65c83861fc0928ff36db1f11daf43e3ef160c47a",
+          "md5": "d812297bc13b5e1982cc2bfe5f739e12"
+        }
+      ]
+    }
+  ]
+}
