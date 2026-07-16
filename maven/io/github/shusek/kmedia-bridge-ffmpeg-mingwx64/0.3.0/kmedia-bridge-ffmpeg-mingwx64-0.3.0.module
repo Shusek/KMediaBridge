@@ -1,0 +1,86 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../kmedia-bridge-ffmpeg/0.3.0/kmedia-bridge-ffmpeg-0.3.0.module",
+    "group": "io.github.shusek",
+    "module": "kmedia-bridge-ffmpeg",
+    "version": "0.3.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.6.1"
+    }
+  },
+  "variants": [
+    {
+      "name": "mingwX64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "mingw_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "dependencies": [
+        {
+          "group": "io.github.shusek",
+          "module": "kmedia-bridge-api",
+          "version": {
+            "requires": "0.3.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "ffmpeg-mingwX64Main-0.3.0.klib",
+          "url": "kmedia-bridge-ffmpeg-mingwx64-0.3.0.klib",
+          "size": 26451,
+          "sha512": "300c203f1e538b5d5441e8c95e1533c64936604620cb446c4a949aff0001565b89de22e00b5678436c6a1ebee1d9adf0ba66aec17393214e3e301b66311e8438",
+          "sha256": "eb2b94fcd3e3f7f3807f1a68159b784a2e3d839f82264ab9284c1310a9df70cd",
+          "sha1": "84c46307751c9c4413e6d618e14e90013219cb40",
+          "md5": "3d7833f65b17bf8222a121a566fc4781"
+        }
+      ]
+    },
+    {
+      "name": "mingwX64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "mingw_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "files": [
+        {
+          "name": "ffmpeg-mingwx64-0.3.0-sources.jar",
+          "url": "kmedia-bridge-ffmpeg-mingwx64-0.3.0-sources.jar",
+          "size": 5301,
+          "sha512": "237ec267cd1f1a6039f907612b2e0989edb48c5bae7c076a168d8cbc345f2047b9622f6e853f952ecafa07bed752bc1c39d6723357675cfe1872f391460861c0",
+          "sha256": "1bae0208df500239df4222e7acc8942e4c3b6878535d3aac6c6bb8ca2cc0316e",
+          "sha1": "b2cf6be78cff7e1d5c610a846ae1965860fd2264",
+          "md5": "f48001ca2a124349bfe1c2504c86a63c"
+        }
+      ]
+    }
+  ]
+}

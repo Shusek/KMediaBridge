@@ -1,0 +1,116 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../kmedia-bridge-api/0.3.0/kmedia-bridge-api-0.3.0.module",
+    "group": "io.github.shusek",
+    "module": "kmedia-bridge-api",
+    "version": "0.3.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.6.1"
+    }
+  },
+  "variants": [
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "api-jvm-0.3.0.jar",
+          "url": "kmedia-bridge-api-jvm-0.3.0.jar",
+          "size": 85050,
+          "sha512": "3b48aa7aecc63ebf37a796ab9e1adc65cc5c78fb3a96e0e8534241241b3d5e2426870544463dab24a11fc71a46070dca958e8b98aa4c8cf378f8f52efe6e6838",
+          "sha256": "d1700ad92211d3a3cc86521bf1cff7dcb89fa56d3884e96c2185f20d5375f857",
+          "sha1": "5724c18948cd290414eb5bb2d3e5003b3f3c6303",
+          "md5": "b9d85c825755b9ca027a348490715cf1"
+        }
+      ]
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "api-jvm-0.3.0.jar",
+          "url": "kmedia-bridge-api-jvm-0.3.0.jar",
+          "size": 85050,
+          "sha512": "3b48aa7aecc63ebf37a796ab9e1adc65cc5c78fb3a96e0e8534241241b3d5e2426870544463dab24a11fc71a46070dca958e8b98aa4c8cf378f8f52efe6e6838",
+          "sha256": "d1700ad92211d3a3cc86521bf1cff7dcb89fa56d3884e96c2185f20d5375f857",
+          "sha1": "5724c18948cd290414eb5bb2d3e5003b3f3c6303",
+          "md5": "b9d85c825755b9ca027a348490715cf1"
+        }
+      ]
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "files": [
+        {
+          "name": "api-jvm-0.3.0-sources.jar",
+          "url": "kmedia-bridge-api-jvm-0.3.0-sources.jar",
+          "size": 4500,
+          "sha512": "8d600453d660c4a8bbe5732f72a2b3817405175fd76c4c77469a1bad8d0582402e0d38c400741db5b88d4be1547267dfa4bed6d873979de3cff6243e47b54ba0",
+          "sha256": "c58e60b927d708415a94478332faf00007a91f083e4ce1d7ad1ad78b09769335",
+          "sha1": "c96f6adbcf142611d78ca03c6ad21740cfb56ed7",
+          "md5": "e47a12d385d0b3766b5703665880ed1f"
+        }
+      ]
+    }
+  ]
+}

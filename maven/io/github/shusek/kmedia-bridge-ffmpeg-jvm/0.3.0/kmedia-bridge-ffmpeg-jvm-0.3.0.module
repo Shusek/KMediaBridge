@@ -1,0 +1,144 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../kmedia-bridge-ffmpeg/0.3.0/kmedia-bridge-ffmpeg-0.3.0.module",
+    "group": "io.github.shusek",
+    "module": "kmedia-bridge-ffmpeg",
+    "version": "0.3.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.6.1"
+    }
+  },
+  "variants": [
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "io.github.shusek",
+          "module": "kmedia-bridge-api",
+          "version": {
+            "requires": "0.3.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "ffmpeg-jvm-0.3.0.jar",
+          "url": "kmedia-bridge-ffmpeg-jvm-0.3.0.jar",
+          "size": 197857,
+          "sha512": "364f7bc26d2020741a8268012e222f691e3b89db0fd2b047af085e3045309b7d745ee60ca53bd3294dbf3cc7dd515d1b0f401cf92d9c8f2884696ea968636680",
+          "sha256": "0fbc43561cef22159e765c105b88cfb4c59036335bdf2156b743673a9ada744f",
+          "sha1": "008fd7b66863b5d32ba81cfa633abca2bb77f196",
+          "md5": "c3a0e2ab5bfe344c7595b715177ce045"
+        }
+      ]
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "io.github.shusek",
+          "module": "kmedia-bridge-api",
+          "version": {
+            "requires": "0.3.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.0"
+          }
+        },
+        {
+          "group": "net.java.dev.jna",
+          "module": "jna",
+          "version": {
+            "requires": "5.19.1"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-json",
+          "version": {
+            "requires": "1.11.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "ffmpeg-jvm-0.3.0.jar",
+          "url": "kmedia-bridge-ffmpeg-jvm-0.3.0.jar",
+          "size": 197857,
+          "sha512": "364f7bc26d2020741a8268012e222f691e3b89db0fd2b047af085e3045309b7d745ee60ca53bd3294dbf3cc7dd515d1b0f401cf92d9c8f2884696ea968636680",
+          "sha256": "0fbc43561cef22159e765c105b88cfb4c59036335bdf2156b743673a9ada744f",
+          "sha1": "008fd7b66863b5d32ba81cfa633abca2bb77f196",
+          "md5": "c3a0e2ab5bfe344c7595b715177ce045"
+        }
+      ]
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "files": [
+        {
+          "name": "ffmpeg-jvm-0.3.0-sources.jar",
+          "url": "kmedia-bridge-ffmpeg-jvm-0.3.0-sources.jar",
+          "size": 29954,
+          "sha512": "4f2d0f00b8d06daa868cbdccfca996183a07d5195faba389ffc8f8237428b7bafc9bed0cf4ecc9e2b99cee6c1d7fbd2a7383d4f03d2cac601ec2c171dd6eb526",
+          "sha256": "17a65c0fdef85670acd5a439216398691ad10f46bf0826d7def0fa8a4882ab3d",
+          "sha1": "c658f55ec6967f2e6002e84ba74c7df12b7ff76a",
+          "md5": "59cf45bd21401a4fc8a40805c3758feb"
+        }
+      ]
+    }
+  ]
+}

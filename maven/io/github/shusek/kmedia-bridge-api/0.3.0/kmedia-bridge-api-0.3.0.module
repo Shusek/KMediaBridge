@@ -1,0 +1,528 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "io.github.shusek",
+    "module": "kmedia-bridge-api",
+    "version": "0.3.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.6.1"
+    }
+  },
+  "variants": [
+    {
+      "name": "metadataApiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "api-metadata-0.3.0.jar",
+          "url": "kmedia-bridge-api-0.3.0.jar",
+          "size": 7297,
+          "sha512": "099fc7aed4cf6b8393614a1070041448cd9c61fe6cc6cdd54aeb73a3c7d9cf59e2cfd3101fac3cf90088c0aa4592df54923d47992598ea45df05a0e36ad8dc49",
+          "sha256": "b2e0efa9eff2510608c7b39a494088ed8ed954efe1f83759dcc3b721f8250b8e",
+          "sha1": "d8d84d0668494bacb4938618adbeb213414404b1",
+          "md5": "c69461bd4e312d48b8dd7f3d30db03db"
+        }
+      ]
+    },
+    {
+      "name": "metadataSourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "files": [
+        {
+          "name": "api-kotlin-0.3.0-sources.jar",
+          "url": "kmedia-bridge-api-0.3.0-sources.jar",
+          "size": 4500,
+          "sha512": "8d600453d660c4a8bbe5732f72a2b3817405175fd76c4c77469a1bad8d0582402e0d38c400741db5b88d4be1547267dfa4bed6d873979de3cff6243e47b54ba0",
+          "sha256": "c58e60b927d708415a94478332faf00007a91f083e4ce1d7ad1ad78b09769335",
+          "sha1": "c96f6adbcf142611d78ca03c6ad21740cfb56ed7",
+          "md5": "e47a12d385d0b3766b5703665880ed1f"
+        }
+      ]
+    },
+    {
+      "name": "androidApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-android/0.3.0/kmedia-bridge-api-android-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-android",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "androidRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-android/0.3.0/kmedia-bridge-api-android-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-android",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "androidSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-android/0.3.0/kmedia-bridge-api-android-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-android",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "iosArm64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "ios_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-iosarm64/0.3.0/kmedia-bridge-api-iosarm64-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-iosarm64",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "iosArm64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "ios_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-iosarm64/0.3.0/kmedia-bridge-api-iosarm64-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-iosarm64",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "iosArm64MetadataElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.native.target": "ios_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-iosarm64/0.3.0/kmedia-bridge-api-iosarm64-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-iosarm64",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "iosSimulatorArm64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "ios_simulator_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-iossimulatorarm64/0.3.0/kmedia-bridge-api-iossimulatorarm64-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-iossimulatorarm64",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "iosSimulatorArm64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "ios_simulator_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-iossimulatorarm64/0.3.0/kmedia-bridge-api-iossimulatorarm64-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-iossimulatorarm64",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "iosSimulatorArm64MetadataElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.native.target": "ios_simulator_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-iossimulatorarm64/0.3.0/kmedia-bridge-api-iossimulatorarm64-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-iossimulatorarm64",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-jvm/0.3.0/kmedia-bridge-api-jvm-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-jvm",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-jvm/0.3.0/kmedia-bridge-api-jvm-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-jvm",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-jvm/0.3.0/kmedia-bridge-api-jvm-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-jvm",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "linuxArm64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "linux_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-linuxarm64/0.3.0/kmedia-bridge-api-linuxarm64-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-linuxarm64",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "linuxArm64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "linux_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-linuxarm64/0.3.0/kmedia-bridge-api-linuxarm64-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-linuxarm64",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "linuxX64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "linux_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-linuxx64/0.3.0/kmedia-bridge-api-linuxx64-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-linuxx64",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "linuxX64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "linux_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-linuxx64/0.3.0/kmedia-bridge-api-linuxx64-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-linuxx64",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "macosArm64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "macos_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-macosarm64/0.3.0/kmedia-bridge-api-macosarm64-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-macosarm64",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "macosArm64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "macos_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-macosarm64/0.3.0/kmedia-bridge-api-macosarm64-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-macosarm64",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "macosArm64MetadataElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.native.target": "macos_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-macosarm64/0.3.0/kmedia-bridge-api-macosarm64-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-macosarm64",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "macosX64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "macos_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-macosx64/0.3.0/kmedia-bridge-api-macosx64-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-macosx64",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "macosX64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "macos_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-macosx64/0.3.0/kmedia-bridge-api-macosx64-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-macosx64",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "macosX64MetadataElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.native.target": "macos_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-macosx64/0.3.0/kmedia-bridge-api-macosx64-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-macosx64",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "mingwX64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "mingw_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-mingwx64/0.3.0/kmedia-bridge-api-mingwx64-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-mingwx64",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "mingwX64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "mingw_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-mingwx64/0.3.0/kmedia-bridge-api-mingwx64-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-mingwx64",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "wasmJsApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-wasm-js/0.3.0/kmedia-bridge-api-wasm-js-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-wasm-js",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "wasmJsRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-wasm-js/0.3.0/kmedia-bridge-api-wasm-js-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-wasm-js",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "wasmJsSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../kmedia-bridge-api-wasm-js/0.3.0/kmedia-bridge-api-wasm-js-0.3.0.module",
+        "group": "io.github.shusek",
+        "module": "kmedia-bridge-api-wasm-js",
+        "version": "0.3.0"
+      }
+    }
+  ]
+}

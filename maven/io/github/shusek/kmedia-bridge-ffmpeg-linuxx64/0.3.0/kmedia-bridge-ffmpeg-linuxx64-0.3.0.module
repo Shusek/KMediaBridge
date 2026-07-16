@@ -1,0 +1,86 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../kmedia-bridge-ffmpeg/0.3.0/kmedia-bridge-ffmpeg-0.3.0.module",
+    "group": "io.github.shusek",
+    "module": "kmedia-bridge-ffmpeg",
+    "version": "0.3.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.6.1"
+    }
+  },
+  "variants": [
+    {
+      "name": "linuxX64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "linux_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "dependencies": [
+        {
+          "group": "io.github.shusek",
+          "module": "kmedia-bridge-api",
+          "version": {
+            "requires": "0.3.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "ffmpeg-linuxX64Main-0.3.0.klib",
+          "url": "kmedia-bridge-ffmpeg-linuxx64-0.3.0.klib",
+          "size": 26451,
+          "sha512": "9d3832da621ad5a62153311dcee365a6fb8535a8c1e6db9efacd3176cf1eb07a1ffec529606347dcc19cf5ee6be476acf37615c6534c6e0a1630cef9103d8199",
+          "sha256": "6625e05f499827a323a827a10be47abea01c4d2716ef5ee8ad48561c4165dd94",
+          "sha1": "04907566c17b2ec9b9f14d1ce768157aec498772",
+          "md5": "49533601c63352825fecbca08a780703"
+        }
+      ]
+    },
+    {
+      "name": "linuxX64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "linux_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "files": [
+        {
+          "name": "ffmpeg-linuxx64-0.3.0-sources.jar",
+          "url": "kmedia-bridge-ffmpeg-linuxx64-0.3.0-sources.jar",
+          "size": 5301,
+          "sha512": "237ec267cd1f1a6039f907612b2e0989edb48c5bae7c076a168d8cbc345f2047b9622f6e853f952ecafa07bed752bc1c39d6723357675cfe1872f391460861c0",
+          "sha256": "1bae0208df500239df4222e7acc8942e4c3b6878535d3aac6c6bb8ca2cc0316e",
+          "sha1": "b2cf6be78cff7e1d5c610a846ae1965860fd2264",
+          "md5": "f48001ca2a124349bfe1c2504c86a63c"
+        }
+      ]
+    }
+  ]
+}
