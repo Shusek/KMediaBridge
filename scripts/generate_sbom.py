@@ -40,6 +40,9 @@ def main() -> int:
 
     root = Path(__file__).resolve().parent.parent
     manifest = json.loads((root / "compliance/ffmpeg/manifest.json").read_text(encoding="utf-8"))
+    subtitle_manifest = json.loads(
+        (root / "compliance/subtitles/manifest.json").read_text(encoding="utf-8")
+    )
     catalog = (root / "gradle/libs.versions.toml").read_text(encoding="utf-8")
     project_version = arguments.version
     kotlin_version = version_from_catalog(catalog, "kotlin")
@@ -167,6 +170,25 @@ def main() -> int:
             },
         ],
     }
+
+    for native_component in subtitle_manifest["components"]:
+        bom["components"].append(
+            {
+                "type": "library",
+                "bom-ref": (
+                    f"pkg:generic/{native_component['name'].lower().replace(' ', '-')}@"
+                    f"{native_component['version']}"
+                ),
+                "name": native_component["name"],
+                "version": native_component["version"],
+                "scope": "optional",
+                "hashes": [{"alg": "SHA-256", "content": native_component["sourceSha256"]}],
+                "licenses": [{"license": {"id": native_component["license"]}}],
+                "externalReferences": [
+                    {"type": "distribution", "url": native_component["sourceUrl"]}
+                ],
+            }
+        )
 
     arguments.output.parent.mkdir(parents=True, exist_ok=True)
     arguments.output.write_text(json.dumps(bom, indent=2, sort_keys=True) + "\n", encoding="utf-8")

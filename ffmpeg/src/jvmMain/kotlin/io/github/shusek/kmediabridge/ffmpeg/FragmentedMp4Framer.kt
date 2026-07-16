@@ -148,9 +148,14 @@ internal class FragmentedMp4Framer(
     }
 }
 
-private data class FragmentTiming(val presentationTimeUs: Long, val durationUs: Long)
+private data class FragmentTiming(
+    val presentationTimeUs: Long,
+    val durationUs: Long,
+)
 
-private class Mp4TimingReader(initialization: ByteArray) {
+private class Mp4TimingReader(
+    initialization: ByteArray,
+) {
     private val timescales: Map<Long, Long> = readTrackTimescales(initialization)
 
     fun readFragmentTiming(fragment: ByteArray): FragmentTiming? {

@@ -62,9 +62,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes gnupg
-      - name: Install GnuPG on macOS
+      - name: Install signed-source and subtitle build tools on macOS
         if: startsWith(matrix.platform, 'macos-')
-        run: brew install gnupg
+        run: brew install gnupg meson ninja pkgconf
       - name: Verify the signed FFmpeg source release
         shell: bash
         run: |
@@ -83,7 +83,14 @@ jobs:
             "$RUNNER_TEMP/ffmpeg-8.1.2.tar.xz.asc" \
             "$RUNNER_TEMP/ffmpeg-devel.asc"
       - name: Build and inspect the LGPL runtime
-        run: ${{ matrix.build }} "$RUNNER_TEMP/native-work" "$RUNNER_TEMP/native-dist"
+        shell: bash
+        run: |
+          if [[ "${{ matrix.platform }}" == macos-* ]]; then
+            ./native/build-ffmpeg-unix.sh \
+              "$RUNNER_TEMP/native-work" "$RUNNER_TEMP/native-dist" subtitle-sdr
+          else
+            ${{ matrix.build }} "$RUNNER_TEMP/native-work" "$RUNNER_TEMP/native-dist"
+          fi
       - name: Package classpath runtime resources
         run: >-
           python3 scripts/package_native_runtime.py
@@ -107,9 +114,11 @@ jobs:
       - name: Assemble a replaceable platform bundle
         shell: bash
         run: |
-          rm -rf "$RUNNER_TEMP/native-dist/compliance/source"
           archive="$RUNNER_TEMP/kmedia-bridge-${{ steps.version.outputs.value }}-${{ matrix.platform }}.tar.gz"
-          tar -czf "$archive" -C "$RUNNER_TEMP/native-dist" lib include compliance
+          tar -czf "$archive" \
+            --exclude='compliance/source' \
+            --exclude='compliance/subtitle-components/source' \
+            -C "$RUNNER_TEMP/native-dist" lib include compliance
       - name: Upload classpath resources
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -121,6 +130,15 @@ jobs:
         with:
           name: native-bundle-${{ matrix.platform }}
           path: ${{ runner.temp }}/kmedia-bridge-${{ steps.version.outputs.value }}-${{ matrix.platform }}.tar.gz
+          if-no-files-found: error
+      - name: Upload exact corresponding source archives
+        if: matrix.platform == 'macos-aarch64'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: corresponding-source-archives
+          path: |
+            ${{ runner.temp }}/native-dist/compliance/source/*
+            ${{ runner.temp }}/native-dist/compliance/subtitle-components/source/*
           if-no-files-found: error
 
   release:
@@ -159,6 +177,11 @@ jobs:
           pattern: native-bundle-*
           path: ${{ runner.temp }}/native-bundles
           merge-multiple: true
+      - name: Download exact corresponding source archives
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: corresponding-source-archives
+          path: ${{ runner.temp }}/corresponding-sources
       - name: Assemble and verify the binary manifest
         run: >-
           python3 scripts/assemble_runtime_manifest.py
@@ -214,9 +237,9 @@ jobs:
           mkdir -p "$evidence"
           cp build/reports/compliance/sbom.cdx.json "$evidence/kmedia-bridge-$version-sbom.cdx.json"
           cp "$RUNNER_TEMP/native-bundles/"* "$evidence/"
-          curl --fail --location --proto '=https' --tlsv1.2 \
-            --output "$evidence/ffmpeg-8.1.2.tar.xz" \
-            https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz
+          find "$RUNNER_TEMP/corresponding-sources" -type f \
+            \( -name '*.tar.xz' -o -name '*.tar.gz' \) \
+            -exec cp {} "$evidence/" \;
           curl --fail --location --proto '=https' --tlsv1.2 \
             --output "$evidence/ffmpeg-8.1.2.tar.xz.asc" \
             https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz.asc
@@ -225,6 +248,20 @@ jobs:
             https://ffmpeg.org/ffmpeg-devel.asc
           test "$(shasum -a 256 "$evidence/ffmpeg-8.1.2.tar.xz" | awk '{print $1}')" = \
             "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c"
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          evidence = Path(os.environ["RUNNER_TEMP"]) / "release-evidence"
+          manifest = json.loads(Path("compliance/subtitles/manifest.json").read_text())
+          for component in manifest["components"]:
+              archive = evidence / Path(component["sourceUrl"]).name
+              actual = hashlib.sha256(archive.read_bytes()).hexdigest()
+              if actual != component["sourceSha256"]:
+                  raise SystemExit(f"source hash mismatch: {archive.name}")
+          PY
           tar -czf "$evidence/kmedia-bridge-$version-native-resources.tar.gz" \
             -C "$RUNNER_TEMP/native-resources" .
           tar -czf "$evidence/kmedia-bridge-$version-compliance.tar.gz" \

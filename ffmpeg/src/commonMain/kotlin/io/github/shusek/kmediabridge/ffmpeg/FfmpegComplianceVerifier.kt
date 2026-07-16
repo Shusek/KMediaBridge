@@ -19,6 +19,7 @@ public object FfmpegComplianceVerifier {
             "BSD-2-Clause",
             "BSD-3-Clause",
             "BSL-1.0",
+            "FTL",
             "ISC",
             "LGPL-2.1-or-later",
             "LGPL-3.0-or-later",
@@ -125,7 +126,7 @@ public object FfmpegComplianceVerifier {
         return FfmpegComplianceReport(violations)
     }
 
-    public fun requireCompliant(runtime: FfmpegRuntimeInfo): Unit {
+    public fun requireCompliant(runtime: FfmpegRuntimeInfo) {
         val report = verify(runtime)
         if (!report.isCompliant) {
             throw MediaBridgeException(
@@ -136,6 +137,20 @@ public object FfmpegComplianceVerifier {
                         separator = "; ",
                     ) { "${it.code}: ${it.message}" },
             )
+        }
+    }
+
+    /**
+     * Applies KMediaBridge's LGPL redistribution gate only to a native payload
+     * conveyed by KMediaBridge. A caller-provided runtime is still expected to
+     * pass the loader's ABI, identity, path, and hash checks, but its effective
+     * license and any resulting application obligations belong to the caller.
+     * Call [verify] explicitly when an application wants to require the same
+     * LGPL-only policy for an external runtime.
+     */
+    public fun requireAllowedByDistributionPolicy(runtime: FfmpegRuntimeInfo) {
+        if (runtime.complianceScope == FfmpegRuntimeComplianceScope.KMEDIABRIDGE_DISTRIBUTED) {
+            requireCompliant(runtime)
         }
     }
 

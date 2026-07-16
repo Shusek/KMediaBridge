@@ -8,9 +8,16 @@ public class MediaInput(
     public val kind: MediaInputKind = MediaInputKind.URI,
     public val isLive: Boolean = false,
     public val isEncrypted: Boolean = false,
+    requestHeaders: Map<String, String> = emptyMap(),
 ) {
+    public val requestHeaders: Map<String, String> = requestHeaders.toMap()
+
     init {
         require(locator.isNotBlank()) { "A media locator cannot be blank." }
+        this.requestHeaders.forEach { (name, value) ->
+            require(name.isNotBlank() && '\r' !in name && '\n' !in name) { "A request-header name is invalid." }
+            require('\r' !in value && '\n' !in value) { "A request-header value is invalid." }
+        }
     }
 
     override fun equals(other: Any?): Boolean =
@@ -18,18 +25,21 @@ public class MediaInput(
             locator == other.locator &&
             kind == other.kind &&
             isLive == other.isLive &&
-            isEncrypted == other.isEncrypted
+            isEncrypted == other.isEncrypted &&
+            requestHeaders == other.requestHeaders
 
     override fun hashCode(): Int {
         var result = locator.hashCode()
         result = 31 * result + kind.hashCode()
         result = 31 * result + isLive.hashCode()
         result = 31 * result + isEncrypted.hashCode()
+        result = 31 * result + requestHeaders.hashCode()
         return result
     }
 
     override fun toString(): String =
-        "MediaInput(locator=<redacted>, kind=$kind, isLive=$isLive, isEncrypted=$isEncrypted)"
+        "MediaInput(locator=<redacted>, kind=$kind, isLive=$isLive, isEncrypted=$isEncrypted, " +
+            "requestHeaderNames=${requestHeaders.keys.sorted()})"
 }
 
 public enum class MediaInputKind {
@@ -158,6 +168,9 @@ public data class AudioTrackInfo(
     public val codecName: String,
     public val channels: Int?,
     public val sampleRateHz: Int?,
+    public val bitrate: Int? = null,
+    public val title: String? = null,
+    public val isDefault: Boolean = false,
 ) : MediaTrackInfo
 
 public data class SubtitleTrackInfo(
@@ -165,6 +178,8 @@ public data class SubtitleTrackInfo(
     override val language: String?,
     public val codecName: String,
     public val isImageBased: Boolean,
+    public val title: String? = null,
+    public val isDefault: Boolean = false,
 ) : MediaTrackInfo
 
 public data class MediaProbe(
@@ -180,7 +195,19 @@ public enum class BridgeOutput {
 
 public enum class VideoHandling {
     COPY,
+    TRANSCODE_TO_SDR,
     TONE_MAP_TO_SDR,
+}
+
+public enum class AudioHandling {
+    OMIT,
+    COPY,
+    TRANSCODE_AAC,
+}
+
+public enum class SubtitleHandling {
+    OMIT,
+    BURN_IN,
 }
 
 public enum class DolbyVisionHandling {
@@ -193,13 +220,37 @@ public enum class DolbyVisionHandling {
 public data class BridgeRequest(
     public val output: BridgeOutput = BridgeOutput.CMAF_FRAGMENT_STREAM,
     public val videoHandling: VideoHandling = VideoHandling.COPY,
+    public val audioHandling: AudioHandling = AudioHandling.COPY,
+    public val subtitleHandling: SubtitleHandling = SubtitleHandling.OMIT,
     public val dolbyVisionHandling: DolbyVisionHandling = DolbyVisionHandling.PRESERVE,
     public val fragmentDurationUs: Long = 4_000_000L,
+    public val preferredVideoTrackId: Int? = null,
+    public val preferredAudioTrackId: Int? = null,
+    public val preferredSubtitleTrackId: Int? = null,
 ) {
     init {
         require(fragmentDurationUs > 0L) { "Fragment duration must be positive." }
+        require(preferredVideoTrackId == null || preferredVideoTrackId >= 0) { "A video track id cannot be negative." }
+        require(preferredAudioTrackId == null || preferredAudioTrackId >= 0) { "An audio track id cannot be negative." }
+        require(preferredSubtitleTrackId == null || preferredSubtitleTrackId >= 0) {
+            "A subtitle track id cannot be negative."
+        }
+        require(subtitleHandling == SubtitleHandling.BURN_IN || preferredSubtitleTrackId == null) {
+            "A selected subtitle track requires BURN_IN subtitle handling."
+        }
     }
 }
+
+public data class MediaOutputInfo(
+    public val videoHandling: VideoHandling,
+    public val audioHandling: AudioHandling,
+    public val subtitleHandling: SubtitleHandling,
+    public val selectedVideoTrackId: Int?,
+    public val selectedAudioTrackId: Int?,
+    public val selectedSubtitleTrackId: Int?,
+    public val inputColorInfo: VideoColorInfo?,
+    public val outputColorInfo: VideoColorInfo?,
+)
 
 public data class MediaFragment(
     public val sequence: Long,
@@ -210,9 +261,17 @@ public data class MediaFragment(
 )
 
 public sealed interface MediaBridgeEvent {
-    public data class Fragment(public val value: MediaFragment) : MediaBridgeEvent
+    public data class OutputConfigured(
+        public val value: MediaOutputInfo,
+    ) : MediaBridgeEvent
 
-    public data class Discontinuity(public val resumeTimeUs: Long) : MediaBridgeEvent
+    public data class Fragment(
+        public val value: MediaFragment,
+    ) : MediaBridgeEvent
+
+    public data class Discontinuity(
+        public val resumeTimeUs: Long,
+    ) : MediaBridgeEvent
 
     public data object EndOfStream : MediaBridgeEvent
 }

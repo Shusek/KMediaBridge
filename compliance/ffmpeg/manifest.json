@@ -9,6 +9,7 @@
     "sourceUrl": "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz",
     "sourceSha256": "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c",
     "configureArguments": [
+      "--build-suffix=-kmb",
       "--disable-gpl",
       "--disable-nonfree",
       "--disable-programs",
@@ -47,6 +48,8 @@
     "scripts/package_native_runtime.py",
     "scripts/assemble_runtime_manifest.py",
     "scripts/verify_ffmpeg_release.sh",
+    "native/build-subtitle-deps-unix.sh",
+    "compliance/subtitles/manifest.json",
     "compliance/ffmpeg/manifest.json"
   ]
 }

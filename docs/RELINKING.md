@@ -9,16 +9,31 @@ To rebuild the Unix runtime from its corresponding source:
 ./native/build-ffmpeg-unix.sh build/native-work build/native-dist
 ```
 
+For the macOS SDR subtitle flavor, use the reviewed full profile:
+
+```shell
+./native/build-ffmpeg-unix.sh build/native-work build/native-dist subtitle-sdr
+```
+
 The staged directory contains the exact FFmpeg source archive, bridge source,
 build recipe, generated FFmpeg configuration, compiler identity, license
 texts, notices, runtime inspection, and a SHA-256 inventory. Verify the
 inventory before replacing any file.
 
-A compatible replacement must retain C ABI version 2 and the platform library
-names. Replace `libavformat`, `libavcodec`, and `libavutil` together, then
-rebuild `libkmediabridge` against those exact headers. Run
-`scripts/inspect_native_runtime.py` again; a GPL/nonfree, statically linked, or
-otherwise undocumented runtime is rejected.
+A compatible replacement must retain C ABI version 4 and the platform library
+names. Replace `libavformat-kmb`, `libavcodec-kmb`, and `libavutil-kmb` together;
+the subtitle flavor additionally replaces `libavfilter-kmb` and
+`libswscale-kmb`. Then rebuild `libkmediabridge` against those exact headers. Run
+`scripts/inspect_native_runtime.py` again when preparing an LGPL payload for
+redistribution by KMediaBridge; that publication path rejects GPL/nonfree,
+statically linked, or otherwise undocumented builds.
+
+The `-kmb` suffix is part of the isolation boundary. It prevents KMediaBridge
+and an in-process player such as libVLC from binding to one another's FFmpeg
+libraries. Replacement runtimes must preserve it in their SONAME,
+install-name, DLL, and import-library identities. ELF replacements must also
+preserve the private `LIBAV*_KMB_*` symbol-version namespaces; the runtime
+inspection rejects a generic FFmpeg symbol namespace.
 
 Platform signing and packaging happen after this reproducible build step.
 Redistributors must provide a practical replacement/relinking route appropriate
@@ -28,9 +43,24 @@ For desktop JVM, place the rebuilt libraries and a matching
 `manifest.properties` in one directory and select it explicitly:
 
 ```kotlin
-BundledFfmpegNativeDriver.load(replacementDirectory = Path.of("/replacement"))
+BundledFfmpegNativeDriver.load(
+    runtimeSelection = FfmpegRuntimeSelection.fromExternalDirectory(Path.of("/replacement")),
+)
 ```
 
-The manifest lists every library name/hash, ABI, reported FFmpeg identity,
-source offer, and immutable recipe revision. The loader verifies the replacement
-directory rather than comparing it to hashes from the official bundle.
+The manifest always lists every library name/hash, ABI, and reported FFmpeg
+identity. Source-offer and immutable-recipe evidence are mandatory for a
+KMediaBridge-distributed payload and optional for a caller-provided external
+runtime. The loader verifies the external directory rather than comparing it to
+hashes from the official bundle.
+Subtitle-capable manifests also list the exact FreeType, FriBidi, HarfBuzz,
+libunibreak, and libass sources incorporated into `libavfilter-kmb`.
+`PREFER_EXTERNAL` and `PREFER_BUNDLED` provide a controlled fallback order,
+but a present manifest that fails validation always stops loading instead of
+silently selecting the other source.
+
+An external runtime may report GPL rather than LGPL. In that case the loader
+accepts it as `CALLER_PROVIDED` after technical verification and exposes its
+reported license/configuration in `FfmpegRuntimeInfo`. This only separates it
+from KMediaBridge's publication compliance gate; it does not grant permission
+to distribute an application combined with that runtime.

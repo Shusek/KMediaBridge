@@ -8,8 +8,11 @@ import com.sun.jna.Native
 import com.sun.jna.NativeLibrary
 import com.sun.jna.Pointer
 import com.sun.jna.ptr.PointerByReference
+import io.github.shusek.kmediabridge.BridgeCapabilities
+import io.github.shusek.kmediabridge.BridgeOutput
 import io.github.shusek.kmediabridge.MediaBridgeErrorCode
 import io.github.shusek.kmediabridge.MediaBridgeException
+import io.github.shusek.kmediabridge.MediaContainer
 import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
@@ -26,6 +29,7 @@ internal fun interface KmbWriteCallback : Callback {
     ): Int
 }
 
+@Suppress("FunctionName", "ktlint:standard:function-naming")
 internal interface KmbNativeApi : Library {
     fun kmb_abi_version(): Int
 
@@ -34,6 +38,8 @@ internal interface KmbNativeApi : Library {
     fun kmb_ffmpeg_license(): Pointer?
 
     fun kmb_ffmpeg_configuration(): Pointer?
+
+    fun kmb_runtime_features_json(): Pointer?
 
     fun kmb_probe_json(
         inputLocator: String,
@@ -45,6 +51,20 @@ internal interface KmbNativeApi : Library {
         inputLocator: String,
         fragmentDurationUs: Long,
         startTimeUs: Long,
+        preferredVideoTrackId: Int,
+        preferredAudioTrackId: Int,
+        writeCallback: KmbWriteCallback,
+        opaque: Pointer?,
+        outputError: PointerByReference,
+    ): Int
+
+    fun kmb_burn_subtitles_fragmented_mp4_stream(
+        inputLocator: String,
+        fragmentDurationUs: Long,
+        startTimeUs: Long,
+        preferredVideoTrackId: Int,
+        preferredAudioTrackId: Int,
+        preferredSubtitleTrackId: Int,
         writeCallback: KmbWriteCallback,
         opaque: Pointer?,
         outputError: PointerByReference,
@@ -57,6 +77,8 @@ internal class LoadedFfmpegRuntime(
     private val api: KmbNativeApi,
     @Suppress("unused") private val retainedLibraries: List<NativeLibrary>,
     val runtimeInfo: FfmpegRuntimeInfo,
+    val flavor: FfmpegRuntimeFlavor,
+    val capabilities: BridgeCapabilities,
 ) {
     fun probeJson(inputLocator: String): String {
         val output = PointerByReference()
@@ -77,6 +99,8 @@ internal class LoadedFfmpegRuntime(
         inputLocator: String,
         fragmentDurationUs: Long,
         startTimeUs: Long,
+        preferredVideoTrackId: Int,
+        preferredAudioTrackId: Int,
         consumer: (ByteArray) -> Boolean,
     ) {
         val outputError = PointerByReference()
@@ -95,6 +119,8 @@ internal class LoadedFfmpegRuntime(
                 inputLocator,
                 fragmentDurationUs,
                 startTimeUs,
+                preferredVideoTrackId,
+                preferredAudioTrackId,
                 callback,
                 null,
                 outputError,
@@ -105,6 +131,48 @@ internal class LoadedFfmpegRuntime(
             throw MediaBridgeException(
                 MediaBridgeErrorCode.CONVERSION_FAILED,
                 errorText.ifBlank { "The native FFmpeg remux operation failed without exposing the input locator." },
+            )
+        }
+    }
+
+    fun burnSubtitlesFragmentedMp4(
+        inputLocator: String,
+        fragmentDurationUs: Long,
+        startTimeUs: Long,
+        preferredVideoTrackId: Int,
+        preferredAudioTrackId: Int,
+        preferredSubtitleTrackId: Int,
+        consumer: (ByteArray) -> Boolean,
+    ) {
+        val outputError = PointerByReference()
+        val callbackFailure = AtomicReference<Throwable?>(null)
+        val callback =
+            KmbWriteCallback { _, pointer, size ->
+                try {
+                    if (pointer == null || size <= 0 || !consumer(pointer.getByteArray(0L, size))) 1 else 0
+                } catch (failure: Throwable) {
+                    callbackFailure.compareAndSet(null, failure)
+                    1
+                }
+            }
+        val result =
+            api.kmb_burn_subtitles_fragmented_mp4_stream(
+                inputLocator,
+                fragmentDurationUs,
+                startTimeUs,
+                preferredVideoTrackId,
+                preferredAudioTrackId,
+                preferredSubtitleTrackId,
+                callback,
+                null,
+                outputError,
+            )
+        val errorText = takeOwnedString(outputError.value)
+        callbackFailure.get()?.let { throw it }
+        if (result != KMB_OK && result != KMB_CANCELLED) {
+            throw MediaBridgeException(
+                MediaBridgeErrorCode.CONVERSION_FAILED,
+                errorText.ifBlank { "The native subtitle pipeline failed without exposing the input locator." },
             )
         }
     }
@@ -125,8 +193,55 @@ internal class LoadedFfmpegRuntime(
 }
 
 internal object DesktopRuntimeLoader {
-    private const val SUPPORTED_ABI = 2
+    private const val SUPPORTED_ABI = 4
     private const val MANIFEST_NAME = "manifest.properties"
+
+    fun load(
+        runtimeSelection: FfmpegRuntimeSelection,
+        extractionParentDirectory: Path?,
+        classLoader: ClassLoader,
+    ): LoadedFfmpegRuntime =
+        load(
+            replacementDirectory = selectExternalRuntimeDirectory(runtimeSelection, classLoader),
+            extractionParentDirectory = extractionParentDirectory,
+            classLoader = classLoader,
+        )
+
+    fun inspect(
+        runtimeSelection: FfmpegRuntimeSelection,
+        classLoader: ClassLoader,
+    ): DesktopFfmpegRuntimeStatus =
+        try {
+            val platform = DesktopPlatform.detect()
+            val replacementDirectory = selectExternalRuntimeDirectory(runtimeSelection, classLoader)
+            val source = runtimeSource(platform, replacementDirectory, classLoader, extractionParentDirectory = null)
+            val manifest = source.readManifest()
+            validateManifestPlatformAndAbi(platform, manifest)
+            DesktopFfmpegRuntimeStatus(
+                inspectionLevel = FfmpegRuntimeInspectionLevel.MANIFEST_VALIDATED,
+                origin =
+                    if (replacementDirectory == null) {
+                        FfmpegRuntimeOrigin.BUNDLED
+                    } else {
+                        FfmpegRuntimeOrigin.EXTERNAL_DIRECTORY
+                    },
+                ffmpegVersion = manifest.ffmpegVersion,
+                flavor = manifest.runtimeFlavor,
+                capabilities = manifest.capabilities,
+                detail =
+                    "The runtime manifest is valid. Native hashes, ABI identity, and licensing will be " +
+                        "verified only if playback selects KMediaBridge.",
+            )
+        } catch (error: Exception) {
+            DesktopFfmpegRuntimeStatus(
+                inspectionLevel = FfmpegRuntimeInspectionLevel.NOT_AVAILABLE,
+                origin = null,
+                ffmpegVersion = null,
+                flavor = null,
+                capabilities = null,
+                detail = error.message ?: "No compatible desktop FFmpeg runtime manifest was found.",
+            )
+        }
 
     fun load(
         replacementDirectory: Path?,
@@ -134,35 +249,32 @@ internal object DesktopRuntimeLoader {
         classLoader: ClassLoader,
     ): LoadedFfmpegRuntime {
         val platform = DesktopPlatform.detect()
-        val source =
-            if (replacementDirectory == null) {
-                RuntimeSource.Embedded(platform, classLoader, extractionParentDirectory)
-            } else {
-                RuntimeSource.Replacement(platform, replacementDirectory)
-            }
+        val source = runtimeSource(platform, replacementDirectory, classLoader, extractionParentDirectory)
         val manifest = source.readManifest()
-        if (manifest.platform != platform.id) {
-            reject("The runtime manifest targets ${manifest.platform}, but this JVM requires ${platform.id}.")
-        }
-        if (manifest.abiVersion != SUPPORTED_ABI) {
-            reject("The runtime manifest declares unsupported ABI ${manifest.abiVersion}.")
-        }
+        validateManifestPlatformAndAbi(platform, manifest)
 
         val directory = source.materialize(manifest)
         val resolvedLibraries = verifyLibraries(directory, manifest)
-        val bridge = manifest.libraries.singleOrNull { it.role == LibraryRole.BRIDGE }
-            ?: reject("The runtime manifest must declare exactly one bridge library.")
+        val bridge =
+            manifest.libraries.singleOrNull { it.role == LibraryRole.BRIDGE }
+                ?: reject("The runtime manifest must declare exactly one bridge library.")
+        val loadOptions = nativeLoadOptions(platform)
         val (retained, api) =
             try {
                 val dependencies =
                     manifest.libraries
                         .filter { it.role == LibraryRole.DEPENDENCY }
-                        .map { library -> NativeLibrary.getInstance(resolvedLibraries.getValue(library.name).toString()) }
+                        .map { library ->
+                            NativeLibrary.getInstance(
+                                resolvedLibraries.getValue(library.name).toString(),
+                                loadOptions,
+                            )
+                        }
                 dependencies to
                     Native.load(
                         resolvedLibraries.getValue(bridge.name).toString(),
                         KmbNativeApi::class.java,
-                        mapOf(Library.OPTION_STRING_ENCODING to Charsets.UTF_8.name()),
+                        loadOptions,
                     )
             } catch (error: LinkageError) {
                 throw MediaBridgeException(
@@ -177,11 +289,21 @@ internal object DesktopRuntimeLoader {
         val actualVersion = api.borrowedString(api.kmb_ffmpeg_version())
         val actualLicense = api.borrowedString(api.kmb_ffmpeg_license())
         val actualConfiguration = api.borrowedString(api.kmb_ffmpeg_configuration())
+        val actualFeatures = api.borrowedString(api.kmb_runtime_features_json())
         if (actualVersion != manifest.ffmpegVersion) {
             reject("The loaded FFmpeg version does not match the signed runtime manifest.")
         }
         if (actualLicense != manifest.ffmpegReportedLicense) {
             reject("The loaded FFmpeg license does not match the signed runtime manifest.")
+        }
+        val expectedFeatures =
+            if (manifest.capabilities.canBurnSubtitles) {
+                "{\"subtitleBurnIn\":true}"
+            } else {
+                "{\"subtitleBurnIn\":false}"
+            }
+        if (actualFeatures != expectedFeatures) {
+            reject("The loaded native feature set does not match the signed runtime manifest.")
         }
 
         val runtimeInfo =
@@ -197,9 +319,80 @@ internal object DesktopRuntimeLoader {
                 buildRecipeRevision = manifest.buildRecipeRevision,
                 exactCorrespondingSourceAvailable = manifest.exactCorrespondingSourceAvailable,
                 dynamicLinkingVerified = manifest.dynamicLinkingVerified,
+                linkedComponents = manifest.linkedComponents,
+                origin =
+                    if (replacementDirectory == null) {
+                        FfmpegRuntimeOrigin.BUNDLED
+                    } else {
+                        FfmpegRuntimeOrigin.EXTERNAL_DIRECTORY
+                    },
             )
-        FfmpegComplianceVerifier.requireCompliant(runtimeInfo)
-        return LoadedFfmpegRuntime(api, retained, runtimeInfo)
+        FfmpegComplianceVerifier.requireAllowedByDistributionPolicy(runtimeInfo)
+        return LoadedFfmpegRuntime(
+            api = api,
+            retainedLibraries = retained,
+            runtimeInfo = runtimeInfo,
+            flavor = manifest.runtimeFlavor,
+            capabilities = manifest.capabilities,
+        )
+    }
+
+    private fun nativeLoadOptions(platform: DesktopPlatform): Map<String, Any> =
+        buildMap {
+            put(Library.OPTION_STRING_ENCODING, Charsets.UTF_8.name())
+            when {
+                platform.id.startsWith("macos-") ->
+                    put(Library.OPTION_OPEN_FLAGS, RTLD_NOW or RTLD_LOCAL_DARWIN or RTLD_FIRST)
+                platform.id.startsWith("linux-") ->
+                    put(Library.OPTION_OPEN_FLAGS, RTLD_NOW)
+            }
+        }
+
+    private fun runtimeSource(
+        platform: DesktopPlatform,
+        replacementDirectory: Path?,
+        classLoader: ClassLoader,
+        extractionParentDirectory: Path?,
+    ): RuntimeSource =
+        if (replacementDirectory == null) {
+            RuntimeSource.Embedded(platform, classLoader, extractionParentDirectory)
+        } else {
+            RuntimeSource.Replacement(platform, replacementDirectory)
+        }
+
+    private fun validateManifestPlatformAndAbi(
+        platform: DesktopPlatform,
+        manifest: NativePayloadManifest,
+    ) {
+        if (manifest.platform != platform.id) {
+            reject("The runtime manifest targets ${manifest.platform}, but this JVM requires ${platform.id}.")
+        }
+        if (manifest.abiVersion != SUPPORTED_ABI) {
+            reject("The runtime manifest declares unsupported ABI ${manifest.abiVersion}.")
+        }
+    }
+
+    internal fun selectExternalRuntimeDirectory(
+        runtimeSelection: FfmpegRuntimeSelection,
+        classLoader: ClassLoader,
+    ): Path? {
+        val platform = DesktopPlatform.detect()
+        val externalDirectory = runtimeSelection.externalRuntimeDirectory
+        val bundledAvailable =
+            classLoader.getResource("META-INF/kmediabridge/native/${platform.id}/$MANIFEST_NAME") != null
+        val externalAvailable =
+            externalDirectory
+                ?.toAbsolutePath()
+                ?.normalize()
+                ?.resolve(MANIFEST_NAME)
+                ?.let(Files::isRegularFile) == true
+
+        return when (runtimeSelection.policy) {
+            FfmpegRuntimePolicy.BUNDLED_ONLY -> null
+            FfmpegRuntimePolicy.EXTERNAL_ONLY -> externalDirectory
+            FfmpegRuntimePolicy.PREFER_BUNDLED -> if (bundledAvailable) null else externalDirectory
+            FfmpegRuntimePolicy.PREFER_EXTERNAL -> if (externalAvailable) externalDirectory else null
+        }
     }
 
     private fun verifyLibraries(
@@ -230,8 +423,7 @@ internal object DesktopRuntimeLoader {
         }
     }
 
-    private fun KmbNativeApi.borrowedString(pointer: Pointer?): String =
-        pointer?.getString(0L, Charsets.UTF_8.name()).orEmpty()
+    private fun KmbNativeApi.borrowedString(pointer: Pointer?): String = pointer?.getString(0L, Charsets.UTF_8.name()).orEmpty()
 
     private sealed interface RuntimeSource {
         fun readManifest(): NativePayloadManifest
@@ -246,13 +438,14 @@ internal object DesktopRuntimeLoader {
             private val prefix = "META-INF/kmediabridge/native/${platform.id}"
 
             override fun readManifest(): NativePayloadManifest {
-                val stream = classLoader.getResourceAsStream("$prefix/$MANIFEST_NAME")
-                    ?: throw MediaBridgeException(
-                        MediaBridgeErrorCode.UNSUPPORTED_REQUEST,
-                        "No bundled FFmpeg payload was found for ${platform.id}. Add " +
-                            "io.github.shusek:kmedia-bridge-ffmpeg-runtime-desktop at runtime.",
-                    )
-                return stream.use(NativePayloadManifest::read)
+                val stream =
+                    classLoader.getResourceAsStream("$prefix/$MANIFEST_NAME")
+                        ?: throw MediaBridgeException(
+                            MediaBridgeErrorCode.UNSUPPORTED_REQUEST,
+                            "No bundled FFmpeg payload was found for ${platform.id}. Add " +
+                                "io.github.shusek:kmedia-bridge-ffmpeg-runtime-desktop at runtime.",
+                        )
+                return stream.use { NativePayloadManifest.read(it, requireDistributionEvidence = true) }
             }
 
             override fun materialize(manifest: NativePayloadManifest): Path {
@@ -268,8 +461,9 @@ internal object DesktopRuntimeLoader {
                 directory.toFile().deleteOnExit()
                 manifest.libraries.forEach { library ->
                     requireSimpleName(library.name)
-                    val stream = classLoader.getResourceAsStream("$prefix/${library.name}")
-                        ?: reject("A native library listed by the embedded manifest is missing.")
+                    val stream =
+                        classLoader.getResourceAsStream("$prefix/${library.name}")
+                            ?: reject("A native library listed by the embedded manifest is missing.")
                     val target = directory.resolve(library.name)
                     stream.use { Files.copy(it, target) }
                     secureFile(target)
@@ -295,7 +489,7 @@ internal object DesktopRuntimeLoader {
                             error,
                         )
                     }
-                return stream.use(NativePayloadManifest::read)
+                return stream.use { NativePayloadManifest.read(it, requireDistributionEvidence = false) }
             }
 
             override fun materialize(manifest: NativePayloadManifest): Path = directory
@@ -338,8 +532,12 @@ internal object DesktopRuntimeLoader {
         }
     }
 
-    internal fun reject(message: String): Nothing =
-        throw MediaBridgeException(MediaBridgeErrorCode.NON_COMPLIANT_NATIVE_RUNTIME, message)
+    internal fun reject(message: String): Nothing = throw MediaBridgeException(MediaBridgeErrorCode.NON_COMPLIANT_NATIVE_RUNTIME, message)
+
+    // RTLD_LOCAL is zero on Linux but an explicit flag on Darwin. RTLD_FIRST is Darwin-specific.
+    private const val RTLD_NOW = 0x2
+    private const val RTLD_LOCAL_DARWIN = 0x4
+    private const val RTLD_FIRST = 0x100
 }
 
 private enum class LibraryRole {
@@ -365,20 +563,81 @@ private data class NativePayloadManifest(
     val buildRecipeRevision: String,
     val exactCorrespondingSourceAvailable: Boolean,
     val dynamicLinkingVerified: Boolean,
+    val runtimeFlavor: FfmpegRuntimeFlavor,
+    val capabilities: BridgeCapabilities,
+    val linkedComponents: List<NativeComponentInfo>,
     val libraries: List<NativeLibraryEntry>,
 ) {
     companion object {
-        fun read(stream: InputStream): NativePayloadManifest {
+        fun read(
+            stream: InputStream,
+            requireDistributionEvidence: Boolean,
+        ): NativePayloadManifest {
             val properties = Properties().apply { load(stream) }
+
             fun required(name: String): String =
                 properties.getProperty(name)?.takeIf(String::isNotBlank)
                     ?: DesktopRuntimeLoader.run { reject("The native manifest is missing $name.") }
 
+            fun evidence(name: String): String =
+                if (requireDistributionEvidence) {
+                    required(name)
+                } else {
+                    properties.getProperty(name).orEmpty()
+                }
+
+            fun evidenceBoolean(name: String): Boolean {
+                val value = evidence(name)
+                if (value.isBlank()) return false
+                return value.toBooleanStrictOrNull()
+                    ?: DesktopRuntimeLoader.run { reject("The native manifest has an invalid $name value.") }
+            }
+
+            fun requiredBoolean(name: String): Boolean =
+                required(name).toBooleanStrictOrNull()
+                    ?: DesktopRuntimeLoader.run { reject("The native manifest has an invalid $name value.") }
+
+            fun <T : Enum<T>> requiredEnum(
+                name: String,
+                candidates: Array<T>,
+            ): T =
+                candidates.firstOrNull { it.name == required(name) }
+                    ?: DesktopRuntimeLoader.run { reject("The native manifest has an invalid $name value.") }
+
+            fun <T : Enum<T>> requiredEnumSet(
+                name: String,
+                candidates: Array<T>,
+            ): Set<T> {
+                val declaredValues = required(name).split(',').map(String::trim).filter(String::isNotBlank)
+                if (declaredValues.isEmpty()) {
+                    DesktopRuntimeLoader.run { reject("The native manifest has an empty $name value.") }
+                }
+                return declaredValues
+                    .map { declaredValue ->
+                        candidates.firstOrNull { it.name == declaredValue }
+                            ?: DesktopRuntimeLoader.run { reject("The native manifest has an invalid $name value.") }
+                    }.toSet()
+            }
+
             if (required("schemaVersion") != "1") {
                 DesktopRuntimeLoader.run { reject("The native manifest schema is unsupported.") }
             }
-            val count = required("library.count").toIntOrNull()
-                ?: DesktopRuntimeLoader.run { reject("The native manifest has an invalid library count.") }
+            val count =
+                required("library.count").toIntOrNull()
+                    ?: DesktopRuntimeLoader.run { reject("The native manifest has an invalid library count.") }
+            val componentCount =
+                required("component.count").toIntOrNull()
+                    ?: DesktopRuntimeLoader.run { reject("The native manifest has an invalid component count.") }
+            val linkedComponents =
+                (0 until componentCount).map { index ->
+                    NativeComponentInfo(
+                        name = required("component.$index.name"),
+                        version = required("component.$index.version"),
+                        licenseSpdx = required("component.$index.licenseSpdx"),
+                        sourceArchiveUrl = evidence("component.$index.sourceOfferUrl"),
+                        sourceArchiveSha256 = required("component.$index.sourceSha256"),
+                    )
+                }
             val libraries =
                 (0 until count).map { index ->
                     val role =
@@ -396,26 +655,64 @@ private data class NativePayloadManifest(
             if (libraries.map(NativeLibraryEntry::name).distinct().size != libraries.size) {
                 DesktopRuntimeLoader.run { reject("The native manifest contains duplicate library names.") }
             }
+            val runtimeFlavor = requiredEnum("runtimeFlavor", FfmpegRuntimeFlavor.entries.toTypedArray())
+            val capabilities =
+                BridgeCapabilities(
+                    inputContainers =
+                        requiredEnumSet(
+                            "capability.inputContainers",
+                            MediaContainer.entries.toTypedArray(),
+                        ),
+                    outputs = requiredEnumSet("capability.outputs", BridgeOutput.entries.toTypedArray()),
+                    canProbe = requiredBoolean("capability.canProbe"),
+                    canCopyVideo = requiredBoolean("capability.canCopyVideo"),
+                    canToneMapToSdr = requiredBoolean("capability.canToneMapToSdr"),
+                    canConvertDolbyVisionProfile7 = requiredBoolean("capability.canConvertDolbyVisionProfile7"),
+                    supportsLiveInput = requiredBoolean("capability.supportsLiveInput"),
+                    supportsEncryptedInput = requiredBoolean("capability.supportsEncryptedInput"),
+                    supportsRemoteInput = requiredBoolean("capability.supportsRemoteInput"),
+                    canTranscodeVideo = requiredBoolean("capability.canTranscodeVideo"),
+                    canTranscodeAudio = requiredBoolean("capability.canTranscodeAudio"),
+                    canBurnSubtitles = requiredBoolean("capability.canBurnSubtitles"),
+                )
+            val subtitleFlavor = runtimeFlavor == FfmpegRuntimeFlavor.SUBTITLE_BURN_IN_SDR
+            if (capabilities.canBurnSubtitles != subtitleFlavor || capabilities.canTranscodeVideo != subtitleFlavor) {
+                DesktopRuntimeLoader.run { reject("The native manifest has an inconsistent runtime flavor.") }
+            }
+            val expectedSubtitleComponents =
+                setOf("FreeType", "FriBidi library", "HarfBuzz", "libunibreak", "libass")
+            if (subtitleFlavor && linkedComponents.map(NativeComponentInfo::name).toSet() != expectedSubtitleComponents) {
+                DesktopRuntimeLoader.run { reject("The subtitle runtime does not declare the reviewed component set.") }
+            }
+            if (!subtitleFlavor && linkedComponents.isNotEmpty()) {
+                DesktopRuntimeLoader.run { reject("The remux-only runtime unexpectedly declares linked subtitle components.") }
+            }
             return NativePayloadManifest(
                 platform = required("platform"),
-                abiVersion = required("abiVersion").toIntOrNull()
-                    ?: DesktopRuntimeLoader.run { reject("The native manifest ABI is invalid.") },
+                abiVersion =
+                    required("abiVersion").toIntOrNull()
+                        ?: DesktopRuntimeLoader.run { reject("The native manifest ABI is invalid.") },
                 ffmpegVersion = required("ffmpegVersion"),
                 ffmpegLicenseSpdx = required("ffmpegLicenseSpdx"),
                 ffmpegReportedLicense = required("ffmpegReportedLicense"),
-                sourceOfferUrl = required("sourceOfferUrl"),
-                sourceSha256 = required("sourceSha256"),
-                buildRecipeUrl = required("buildRecipeUrl"),
-                buildRecipeRevision = required("buildRecipeRevision"),
-                exactCorrespondingSourceAvailable = required("exactCorrespondingSourceAvailable").toBooleanStrict(),
-                dynamicLinkingVerified = required("dynamicLinkingVerified").toBooleanStrict(),
+                sourceOfferUrl = evidence("sourceOfferUrl"),
+                sourceSha256 = evidence("sourceSha256"),
+                buildRecipeUrl = evidence("buildRecipeUrl"),
+                buildRecipeRevision = evidence("buildRecipeRevision"),
+                exactCorrespondingSourceAvailable = evidenceBoolean("exactCorrespondingSourceAvailable"),
+                dynamicLinkingVerified = evidenceBoolean("dynamicLinkingVerified"),
+                runtimeFlavor = runtimeFlavor,
+                capabilities = capabilities,
+                linkedComponents = linkedComponents,
                 libraries = libraries,
             )
         }
     }
 }
 
-private data class DesktopPlatform(val id: String) {
+private data class DesktopPlatform(
+    val id: String,
+) {
     companion object {
         fun detect(): DesktopPlatform {
             val osName = System.getProperty("os.name", "").lowercase()

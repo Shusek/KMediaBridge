@@ -4,6 +4,14 @@ KMediaBridge follows a fail-closed distribution policy. A CI job must not
 publish a native payload unless every item below is present and internally
 consistent.
 
+This policy governs native payloads conveyed by KMediaBridge. An application
+may explicitly select a compatible external runtime, including a GPL build,
+without causing KMediaBridge to distribute that runtime. External payloads are
+marked `CALLER_PROVIDED`: the loader still verifies their ABI, file boundaries,
+hashes, and runtime identity, while licensing and distribution analysis remain
+the caller's responsibility. Passing the loader is not a compliance
+certification.
+
 ## Project license
 
 - All KMediaBridge source is LGPL-2.1-or-later.
@@ -13,6 +21,8 @@ consistent.
   KMediaBridge or redistributed FFmpeg components.
 
 ## FFmpeg build boundary
+
+The following requirements apply to payloads published by KMediaBridge:
 
 - Use a signed upstream FFmpeg release, pin its SHA-256, and verify its detached
   signature against fingerprint `FCF986EA15E6E293A5644F10B4322F04D67658D8`.
@@ -24,6 +34,11 @@ consistent.
 - Record the complete configure line and every linked component.
 - Query the built libraries for their reported license and configuration;
   never trust a filename or a manually entered label alone.
+- Keep the optional subtitle stack limited to the pinned FTL/LGPL/MIT/Zlib/ISC
+  components in `compliance/subtitles/manifest.json`. FriBidi tools are GPL and
+  are not built or conveyed; only its LGPL library is linked.
+- A subtitle-capable payload must report `subtitleBurnIn=true` from the native
+  ABI and carry matching manifest capabilities. The loader rejects a mismatch.
 
 ## Required payload evidence
 

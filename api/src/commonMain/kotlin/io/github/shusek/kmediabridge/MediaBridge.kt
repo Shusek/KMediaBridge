@@ -13,6 +13,10 @@ public data class BridgeCapabilities(
     public val canConvertDolbyVisionProfile7: Boolean,
     public val supportsLiveInput: Boolean,
     public val supportsEncryptedInput: Boolean,
+    public val supportsRemoteInput: Boolean = false,
+    public val canTranscodeVideo: Boolean = false,
+    public val canTranscodeAudio: Boolean = false,
+    public val canBurnSubtitles: Boolean = false,
 )
 
 public interface MediaBridge {
@@ -45,7 +49,9 @@ public sealed interface BridgeSupport {
         }
     }
 
-    public data class Unsupported(public val reason: String) : BridgeSupport
+    public data class Unsupported(
+        public val reason: String,
+    ) : BridgeSupport
 }
 
 public interface MediaBridgeProvider {
@@ -66,7 +72,9 @@ public data class MediaBridgeSelection(
     public val bridge: MediaBridge,
 )
 
-public class MediaBridgeRegistry(providers: Iterable<MediaBridgeProvider>) {
+public class MediaBridgeRegistry(
+    providers: Iterable<MediaBridgeProvider>,
+) {
     private val providers: List<MediaBridgeProvider> =
         providers
             .toList()

@@ -42,6 +42,8 @@ mkdir -p "$prefix_dir" "$output_dir/lib" "$output_dir/include" "$output_dir/comp
 
 configure_arguments=(
     "--prefix=$prefix_dir"
+    # Avoid resolving against FFmpeg DLLs installed by VLC or another player.
+    "--build-suffix=-kmb"
     "--target-os=mingw32"
     "--arch=x86_64"
     "--cross-prefix=$cross_prefix"
@@ -88,17 +90,18 @@ configure_arguments=(
     -I "$prefix_dir/include" \
     -shared \
     "$root_dir/native/src/kmedia_bridge.c" \
+    "$root_dir/native/src/kmedia_bridge_subtitles.c" \
     -L "$prefix_dir/lib" \
     -Wl,--no-undefined \
     -Wl,--out-implib,"$output_dir/lib/libkmediabridge.dll.a" \
-    -lavformat \
-    -lavcodec \
-    -lavutil \
+    -lavformat-kmb \
+    -lavcodec-kmb \
+    -lavutil-kmb \
     -o "$output_dir/lib/kmediabridge.dll"
 
-cp "$prefix_dir"/bin/avcodec-*.dll "$output_dir/lib/"
-cp "$prefix_dir"/bin/avformat-*.dll "$output_dir/lib/"
-cp "$prefix_dir"/bin/avutil-*.dll "$output_dir/lib/"
+cp "$prefix_dir"/bin/avcodec-kmb-*.dll "$output_dir/lib/"
+cp "$prefix_dir"/bin/avformat-kmb-*.dll "$output_dir/lib/"
+cp "$prefix_dir"/bin/avutil-kmb-*.dll "$output_dir/lib/"
 for runtime_name in libgcc_s_seh-1.dll libwinpthread-1.dll; do
     runtime_path="$("${cross_prefix}gcc" -print-file-name="$runtime_name")"
     if [[ -f "$runtime_path" ]]; then
@@ -127,8 +130,10 @@ cp "$root_dir/docs/RELINKING.md" "$output_dir/compliance/kmediabridge-source/doc
 cp "$root_dir/native/CMakeLists.txt" "$output_dir/compliance/kmediabridge-source/native/CMakeLists.txt"
 cp "$root_dir/native/build-ffmpeg-unix.sh" "$output_dir/compliance/kmediabridge-source/native/build-ffmpeg-unix.sh"
 cp "$root_dir/native/build-ffmpeg-windows-x64.sh" "$output_dir/compliance/kmediabridge-source/native/build-ffmpeg-windows-x64.sh"
+cp "$root_dir/native/build-subtitle-deps-unix.sh" "$output_dir/compliance/kmediabridge-source/native/build-subtitle-deps-unix.sh"
 cp "$root_dir/native/include/kmedia_bridge.h" "$output_dir/compliance/kmediabridge-source/native/include/kmedia_bridge.h"
 cp "$root_dir/native/src/kmedia_bridge.c" "$output_dir/compliance/kmediabridge-source/native/src/kmedia_bridge.c"
+cp "$root_dir/native/src/kmedia_bridge_subtitles.c" "$output_dir/compliance/kmediabridge-source/native/src/kmedia_bridge_subtitles.c"
 cp "$root_dir/scripts/generate_native_checksums.py" "$output_dir/compliance/kmediabridge-source/scripts/generate_native_checksums.py"
 cp "$root_dir/scripts/inspect_native_runtime.py" "$output_dir/compliance/kmediabridge-source/scripts/inspect_native_runtime.py"
 cp "$root_dir/scripts/package_native_runtime.py" "$output_dir/compliance/kmediabridge-source/scripts/package_native_runtime.py"

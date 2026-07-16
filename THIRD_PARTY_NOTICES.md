@@ -20,6 +20,24 @@ gate.
 
 No FFmpeg trademark rights are granted by this project.
 
+## Optional subtitle composition stack
+
+The SDR subtitle burn-in flavor builds five pinned libraries as static PIC
+inputs to the replaceable, dynamically linked `libavfilter-kmb`. No x264/x265
+or other GPL FFmpeg option is enabled. Exact archives, hashes, and licenses are
+recorded in `compliance/subtitles/manifest.json` and copied into release source
+evidence whenever this flavor is published.
+
+- FreeType 2.14.3 — FreeType License (FTL)
+- FriBidi 1.0.16 library — LGPL-2.1-or-later (GPL command-line tools are not built)
+- HarfBuzz 14.2.1 — MIT
+- libunibreak 7.0 — Zlib
+- libass 0.17.5 — ISC
+
+The burn-in pipeline is intentionally limited to SDR text subtitles. Bitmap
+subtitles and HDR/HLG/Dolby Vision composition are not advertised by this
+stack.
+
 ## Java Native Access (JNA)
 
 The desktop JVM backend uses JNA to call the narrow native C ABI without an

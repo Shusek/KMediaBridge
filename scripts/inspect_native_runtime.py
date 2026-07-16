@@ -18,6 +18,39 @@ from pathlib import Path
 
 FORBIDDEN = ("--enable-gpl", "--enable-nonfree", "--enable-libx264", "--enable-libx265")
 REQUIRED_DYNAMIC_LIBRARIES = ("libavformat", "libavcodec", "libavutil")
+SUBTITLE_DYNAMIC_LIBRARIES = ("libavfilter", "libswscale")
+PRIVATE_FFMPEG_IDENTITY = re.compile(
+    r"(?:lib)?(?:avformat|avcodec|avutil|avfilter|swscale)-kmb(?:[.-]|$)",
+    re.IGNORECASE,
+)
+
+
+def inspect_ffmpeg_dependency_identities(dependencies: str, target: str) -> list[str]:
+    dependency_lines = dependencies.splitlines()
+    if target == "windows":
+        # PE objdump also prints imported symbol names such as avformat_open_input.
+        # Only DLL Name records describe the load-time library identity.
+        dependency_lines = [line for line in dependency_lines if "dll name:" in line.lower()]
+
+    ffmpeg_dependency_lines = [
+        line
+        for line in dependency_lines
+        if any(
+            name.removeprefix("lib") in line.lower()
+            for name in REQUIRED_DYNAMIC_LIBRARIES + SUBTITLE_DYNAMIC_LIBRARIES
+        )
+    ]
+    linked = [
+        name
+        for name in REQUIRED_DYNAMIC_LIBRARIES + SUBTITLE_DYNAMIC_LIBRARIES
+        if any(name.removeprefix("lib") in line.lower() for line in ffmpeg_dependency_lines)
+    ]
+    if not set(REQUIRED_DYNAMIC_LIBRARIES).issubset(linked):
+        missing = sorted(set(REQUIRED_DYNAMIC_LIBRARIES) - set(linked))
+        raise RuntimeError(f"required dynamic FFmpeg libraries are missing: {missing}")
+    if not all(PRIVATE_FFMPEG_IDENTITY.search(line) for line in ffmpeg_dependency_lines):
+        raise RuntimeError("FFmpeg dependencies do not use private -kmb identities")
+    return linked
 
 
 def inspect_dynamic_linking(library_path: Path, target: str) -> list[str]:
@@ -62,10 +95,17 @@ def inspect_dynamic_linking(library_path: Path, target: str) -> list[str]:
     else:
         raise RuntimeError(f"Dynamic dependency inspection is not implemented for {sys.platform}")
 
-    linked = [name for name in REQUIRED_DYNAMIC_LIBRARIES if name.removeprefix("lib") in dependencies]
-    if len(linked) != len(REQUIRED_DYNAMIC_LIBRARIES):
-        missing = sorted(set(REQUIRED_DYNAMIC_LIBRARIES) - set(linked))
-        raise RuntimeError(f"required dynamic FFmpeg libraries are missing: {missing}")
+    linked = inspect_ffmpeg_dependency_identities(dependencies, target)
+    if sys.platform.startswith("linux") and target != "windows":
+        version_info = subprocess.run(
+            ["readelf", "--version-info", str(library_path)],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        required_namespaces = ("LIBAVFORMAT_KMB_", "LIBAVCODEC_KMB_", "LIBAVUTIL_KMB_")
+        if not all(namespace in version_info for namespace in required_namespaces):
+            raise RuntimeError("the ELF bridge does not require private KMediaBridge FFmpeg symbol versions")
     if not replaceable:
         raise RuntimeError("the native bridge has no replaceable loader-relative runtime path")
     return linked
@@ -118,8 +158,10 @@ def main() -> int:
             "kmb_ffmpeg_version",
             "kmb_ffmpeg_license",
             "kmb_ffmpeg_configuration",
+            "kmb_runtime_features_json",
             "kmb_probe_json",
             "kmb_remux_fragmented_mp4_stream",
+            "kmb_burn_subtitles_fragmented_mp4_stream",
         )
         if not all(symbol in exports for symbol in required_exports):
             print("runtime inspection error: required C ABI exports are missing", file=sys.stderr)
@@ -129,7 +171,12 @@ def main() -> int:
             "",
         )
         license_match = re.search(r"LGPL version [^\r\n]+", dll_text)
-        abi_version = 2
+        feature_match = re.search(r'\{"subtitleBurnIn":(?:true|false)\}', dll_text)
+        if feature_match is None:
+            print("runtime inspection error: native feature declaration is absent from PE payload", file=sys.stderr)
+            return 1
+        runtime_features = json.loads(feature_match.group(0))
+        abi_version = 4
         ffmpeg_version = arguments.expected_version
         ffmpeg_license = license_match.group(0) if license_match else ""
         if ffmpeg_version not in dll_text:
@@ -141,13 +188,15 @@ def main() -> int:
         library.kmb_ffmpeg_version.restype = ctypes.c_char_p
         library.kmb_ffmpeg_license.restype = ctypes.c_char_p
         library.kmb_ffmpeg_configuration.restype = ctypes.c_char_p
+        library.kmb_runtime_features_json.restype = ctypes.c_char_p
 
         abi_version = int(library.kmb_abi_version())
         ffmpeg_version = library.kmb_ffmpeg_version().decode("utf-8")
         ffmpeg_license = library.kmb_ffmpeg_license().decode("utf-8")
         configuration = library.kmb_ffmpeg_configuration().decode("utf-8")
+        runtime_features = json.loads(library.kmb_runtime_features_json().decode("utf-8"))
 
-    if abi_version != 2:
+    if abi_version != 4:
         print(f"runtime inspection error: unsupported ABI version {abi_version}", file=sys.stderr)
         return 1
     if "LGPL" not in ffmpeg_license.upper():
@@ -157,6 +206,14 @@ def main() -> int:
         if forbidden in configuration:
             print(f"runtime inspection error: forbidden configuration {forbidden}", file=sys.stderr)
             return 1
+    subtitle_links_present = set(SUBTITLE_DYNAMIC_LIBRARIES).issubset(dynamic_libraries)
+    subtitle_feature_enabled = bool(runtime_features.get("subtitleBurnIn"))
+    if subtitle_feature_enabled != subtitle_links_present:
+        print(
+            "runtime inspection error: subtitle feature and dynamic avfilter/swscale boundary differ",
+            file=sys.stderr,
+        )
+        return 1
     if "--disable-gpl" not in configuration or "--disable-nonfree" not in configuration:
         print("runtime inspection error: fail-closed disable flags are missing", file=sys.stderr)
         return 1
@@ -171,6 +228,10 @@ def main() -> int:
         "dynamicLinkingVerified": True,
         "dynamicFfmpegLibraries": dynamic_libraries,
         "replaceableLoaderPathVerified": True,
+        "runtimeFlavor": (
+            "SUBTITLE_BURN_IN_SDR" if runtime_features.get("subtitleBurnIn") else "REMUX_ONLY"
+        ),
+        "canBurnSubtitles": bool(runtime_features.get("subtitleBurnIn")),
     }
     arguments.output.parent.mkdir(parents=True, exist_ok=True)
     arguments.output.write_text(json.dumps(inspection, indent=2, sort_keys=True) + "\n", encoding="utf-8")

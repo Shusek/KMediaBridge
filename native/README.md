@@ -14,6 +14,15 @@ Generated native directories are intentionally ignored. Release CI transforms
 each inspected result into a classpath payload, embeds per-platform and
 aggregate manifests, and publishes binaries only from an immutable tag.
 
-ABI 2 supports probing and lossless fragmented-MP4 remuxing to a path or a
-backpressured callback. It does not decode, tone-map, or encode video and
-therefore does not require x264 or x265.
+ABI 4 supports probing audio/video/subtitle tracks, an authenticated runtime
+feature declaration, lossless selected-track fragmented-MP4 remuxing to a path
+or a backpressured callback, and an optional SDR text subtitle operation. Build
+the latter on macOS with:
+
+```shell
+./native/build-ffmpeg-unix.sh build/native-work build/native-dist subtitle-sdr
+```
+
+That profile builds the pinned libass stack, decodes supported SDR formats,
+normalizes output to limited BT.709, and uses VideoToolbox for AVC. The default
+profile remains remux-only. Neither profile requires x264 or x265.

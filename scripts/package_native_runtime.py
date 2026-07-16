@@ -15,19 +15,19 @@ from pathlib import Path
 
 PLATFORM_PATTERNS = {
     "macos-aarch64": (
-        re.compile(r"libav(?:util|codec|format)\.\d+\.dylib$"),
+        re.compile(r"lib(?:avutil|avcodec|avformat|avfilter|swscale)-kmb\.\d+\.dylib$"),
         re.compile(r"libkmediabridge\.1\.dylib$"),
     ),
     "macos-x86_64": (
-        re.compile(r"libav(?:util|codec|format)\.\d+\.dylib$"),
+        re.compile(r"lib(?:avutil|avcodec|avformat|avfilter|swscale)-kmb\.\d+\.dylib$"),
         re.compile(r"libkmediabridge\.1\.dylib$"),
     ),
     "linux-x86_64": (
-        re.compile(r"libav(?:util|codec|format)\.so\.\d+$"),
+        re.compile(r"lib(?:avutil|avcodec|avformat|avfilter|swscale)-kmb\.so\.\d+$"),
         re.compile(r"libkmediabridge\.so\.1$"),
     ),
     "windows-x86_64": (
-        re.compile(r"(?:avutil|avcodec|avformat)-\d+\.dll$", re.IGNORECASE),
+        re.compile(r"(?:avutil|avcodec|avformat|avfilter|swscale)-kmb-\d+\.dll$", re.IGNORECASE),
         re.compile(r"kmediabridge\.dll$", re.IGNORECASE),
     ),
 }
@@ -56,9 +56,13 @@ def library_order(path: Path) -> tuple[int, str]:
         return 2, name
     if "avformat" in name:
         return 3, name
-    if "kmediabridge" in name:
+    if "swscale" in name:
         return 4, name
-    return 5, name
+    if "avfilter" in name:
+        return 5, name
+    if "kmediabridge" in name:
+        return 6, name
+    return 7, name
 
 
 def main() -> int:
@@ -72,8 +76,12 @@ def main() -> int:
 
     dist = arguments.dist.resolve()
     inspection = json.loads((dist / "compliance/runtime-inspection.json").read_text(encoding="utf-8"))
-    if inspection.get("abiVersion") != 2:
-        raise ValueError("Only native ABI 2 may be packaged")
+    subtitle_components = json.loads(
+        (Path(__file__).resolve().parent.parent / "compliance/subtitles/manifest.json").read_text(encoding="utf-8")
+    )["components"]
+    linked_components = subtitle_components if inspection["canBurnSubtitles"] else []
+    if inspection.get("abiVersion") != 4:
+        raise ValueError("Only native ABI 4 may be packaged")
     if not inspection.get("dynamicLinkingVerified") or not inspection.get("replaceableLoaderPathVerified"):
         raise ValueError("The native runtime did not pass the replaceable dynamic-link inspection")
     if "LGPL" not in str(inspection.get("ffmpegReportedLicense", "")).upper():
@@ -83,9 +91,11 @@ def main() -> int:
     library_directory = dist / "lib"
     dependencies = [path for path in library_directory.iterdir() if dependency_pattern.fullmatch(path.name)]
     bridge_candidates = [path for path in library_directory.iterdir() if bridge_pattern.fullmatch(path.name)]
-    if len(dependencies) != 3 or len(bridge_candidates) != 1:
+    expected_dependency_count = 5 if inspection["canBurnSubtitles"] else 3
+    if len(dependencies) != expected_dependency_count or len(bridge_candidates) != 1:
         raise ValueError(
-            f"Expected three FFmpeg libraries and one bridge; got {dependencies!r}, {bridge_candidates!r}"
+            f"Expected {expected_dependency_count} FFmpeg libraries and one bridge; "
+            f"got {dependencies!r}, {bridge_candidates!r}"
         )
 
     extra_dependencies: list[Path] = []
@@ -129,8 +139,40 @@ def main() -> int:
         property_line("buildRecipeRevision", arguments.revision),
         property_line("exactCorrespondingSourceAvailable", "true"),
         property_line("dynamicLinkingVerified", "true"),
+        property_line("runtimeFlavor", inspection["runtimeFlavor"]),
+        property_line(
+            "capability.inputContainers",
+            "MATROSKA,WEBM,MP4,FRAGMENTED_MP4,MPEG_TS",
+        ),
+        property_line("capability.outputs", "CMAF_FRAGMENT_STREAM"),
+        property_line("capability.canProbe", "true"),
+        property_line("capability.canCopyVideo", "true"),
+        property_line("capability.canToneMapToSdr", "false"),
+        property_line("capability.canConvertDolbyVisionProfile7", "false"),
+        property_line("capability.supportsLiveInput", "false"),
+        property_line("capability.supportsEncryptedInput", "false"),
+        property_line("capability.supportsRemoteInput", "false"),
+        property_line("capability.canTranscodeVideo", str(inspection["canBurnSubtitles"]).lower()),
+        property_line("capability.canTranscodeAudio", "false"),
+        property_line("capability.canBurnSubtitles", str(inspection["canBurnSubtitles"]).lower()),
+        property_line("component.count", len(linked_components)),
         property_line("library.count", len(entries)),
     ]
+    for index, component in enumerate(linked_components):
+        source_name = Path(component["sourceUrl"]).name
+        source_offer = (
+            f"https://github.com/Shusek/KMediaBridge/releases/download/"
+            f"v{arguments.release_version}/{source_name}"
+        )
+        lines.extend(
+            [
+                property_line(f"component.{index}.name", component["name"]),
+                property_line(f"component.{index}.version", component["version"]),
+                property_line(f"component.{index}.licenseSpdx", component["license"]),
+                property_line(f"component.{index}.sourceOfferUrl", source_offer),
+                property_line(f"component.{index}.sourceSha256", component["sourceSha256"]),
+            ]
+        )
     for index, (name, sha256, role) in enumerate(entries):
         lines.extend(
             [

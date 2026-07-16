@@ -9,13 +9,13 @@ application / KMediaPlayer
 kmedia-bridge-api (Kotlin Multiplatform)
         |
         v
-kmedia-bridge-ffmpeg (compliance gate + orchestration)
+kmedia-bridge-ffmpeg (runtime policy + orchestration)
         |
         v
 versioned C ABI: kmedia_bridge.h
         |
         v
-dynamically linked LGPL FFmpeg libraries
+dynamically linked FFmpeg libraries
 
 kmedia-bridge-ffmpeg-runtime-desktop (runtimeOnly resources)
         |
@@ -30,18 +30,30 @@ and ABI details never appear in application-facing contracts.
 ## Runtime rules
 
 - No application code invokes an FFmpeg executable.
+- Runtime source selection is typed: bundled only, external only, or an
+  explicit preference order between them.
+- An external runtime is a KMediaBridge-compatible directory with the native
+  bridge, FFmpeg libraries, and a verified manifest. Arbitrary system libraries
+  are not discovered or trusted implicitly.
 - The native runtime exposes a small versioned C ABI.
 - Desktop JVM calls that ABI through JNA; it never invokes a program.
 - Native libraries are dynamically linked to keep the LGPL replacement and
   relinking boundary explicit.
 - Input locators are never included in diagnostic strings because URLs may
   contain credentials.
-- The runtime refuses non-LGPL builds before opening media.
+- A bundled runtime refuses non-LGPL builds before opening media because
+  KMediaBridge conveys that payload.
+- A caller-provided external runtime may be GPL. It still passes fail-closed
+  technical verification but is reported as `CALLER_PROVIDED`; KMediaBridge
+  makes no claim that an application linked to it is distributable under the
+  application's chosen license.
 - Encrypted media and DRM are outside the conversion bridge.
 
 ## Platform strategy
 
-- **macOS JVM:** bundled arm64/x64 `.dylib`; AVFoundation receives copied CMAF/fMP4.
+- **macOS JVM:** bundled arm64/x64 `.dylib`; AVFoundation receives copied
+  CMAF/fMP4, or an explicitly selected SDR text subtitle is composed by libass
+  and encoded as AVC with VideoToolbox.
 - **Windows JVM:** bundled x64 `.dll`; Media Foundation remains the primary decoder
   and D3D renderer.
 - **Android:** Media3 remains primary; optional `.so` only for gaps.
@@ -52,7 +64,11 @@ and ABI details never appear in application-facing contracts.
 
 ## Current native ABI
 
-ABI version 2 exposes runtime identity, a typed probe JSON document, a file
-remux operation, and a callback-based fragmented-MP4 stream. The callback
-supports backpressure and cancellation. The remuxer copies supported
-audio/video packets and never re-encodes the video picture.
+ABI version 4 exposes runtime identity, an authenticated feature declaration, a
+typed probe JSON document (including audio and subtitle selection metadata), a
+file remux operation, a track-selecting callback-based fragmented-MP4 stream,
+and an optional SDR subtitle composition operation. The callback supports
+backpressure and cancellation. Remux-only builds never decode the picture;
+subtitle-capable macOS builds decode, compose in libass, normalize to limited
+BT.709, and encode AVC with VideoToolbox. PQ, HLG, BT.2020, Dolby Vision, and
+HDR10+ inputs are rejected by that SDR operation.
