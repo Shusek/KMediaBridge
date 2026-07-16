@@ -8,17 +8,23 @@ import io.github.shusek.kmediabridge.BridgeCapabilities
 import io.github.shusek.kmediabridge.BridgeOutput
 import io.github.shusek.kmediabridge.BridgeRequest
 import io.github.shusek.kmediabridge.BridgeSupport
+import io.github.shusek.kmediabridge.ColorMatrix
+import io.github.shusek.kmediabridge.ColorPrimaries
+import io.github.shusek.kmediabridge.ColorRange
+import io.github.shusek.kmediabridge.ColorTransfer
 import io.github.shusek.kmediabridge.DolbyVisionHandling
+import io.github.shusek.kmediabridge.DynamicRangeFormat
 import io.github.shusek.kmediabridge.MediaBridgeErrorCode
 import io.github.shusek.kmediabridge.MediaBridgeEvent
 import io.github.shusek.kmediabridge.MediaBridgeException
 import io.github.shusek.kmediabridge.MediaBridgeSession
-import io.github.shusek.kmediabridge.MediaContainer
 import io.github.shusek.kmediabridge.MediaInput
 import io.github.shusek.kmediabridge.MediaInputKind
 import io.github.shusek.kmediabridge.MediaOutputInfo
 import io.github.shusek.kmediabridge.MediaProbe
 import io.github.shusek.kmediabridge.SubtitleHandling
+import io.github.shusek.kmediabridge.SubtitleTrackInfo
+import io.github.shusek.kmediabridge.VideoColorInfo
 import io.github.shusek.kmediabridge.VideoHandling
 import io.github.shusek.kmediabridge.VideoTrackInfo
 import kotlinx.coroutines.CancellationException
@@ -54,28 +60,7 @@ public class BundledFfmpegNativeDriver private constructor(
 ) : FfmpegNativeDriver {
     override val runtimeInfo: FfmpegRuntimeInfo = runtime.runtimeInfo
 
-    override val capabilities: BridgeCapabilities =
-        BridgeCapabilities(
-            inputContainers =
-                setOf(
-                    MediaContainer.MATROSKA,
-                    MediaContainer.WEBM,
-                    MediaContainer.MP4,
-                    MediaContainer.FRAGMENTED_MP4,
-                    MediaContainer.MPEG_TS,
-                ),
-            outputs = setOf(BridgeOutput.CMAF_FRAGMENT_STREAM),
-            canProbe = true,
-            canCopyVideo = true,
-            canToneMapToSdr = false,
-            canConvertDolbyVisionProfile7 = false,
-            supportsLiveInput = false,
-            supportsEncryptedInput = false,
-            supportsRemoteInput = false,
-            canTranscodeVideo = false,
-            canTranscodeAudio = false,
-            canBurnSubtitles = false,
-        )
+    override val capabilities: BridgeCapabilities = runtime.capabilities
 
     override suspend fun evaluate(
         input: MediaInput,
@@ -84,8 +69,13 @@ public class BundledFfmpegNativeDriver private constructor(
         val reason = unsupportedReason(input, request)
         return if (reason == null) {
             BridgeSupport.Supported(
-                confidence = 90,
-                reason = "The selected FFmpeg runtime can remux this local input without re-encoding video.",
+                confidence = if (request.subtitleHandling == SubtitleHandling.BURN_IN) 80 else 90,
+                reason =
+                    if (request.subtitleHandling == SubtitleHandling.BURN_IN) {
+                        "The selected FFmpeg runtime can decode SDR video and composite text subtitles through libass."
+                    } else {
+                        "The selected FFmpeg runtime can remux this local input without re-encoding video."
+                    },
             )
         } else {
             BridgeSupport.Unsupported(reason)
@@ -108,6 +98,7 @@ public class BundledFfmpegNativeDriver private constructor(
         val probe = probe(input)
         val videoTracks = probe.tracks.filterIsInstance<VideoTrackInfo>()
         val audioTracks = probe.tracks.filterIsInstance<AudioTrackInfo>()
+        val subtitleTracks = probe.tracks.filterIsInstance<SubtitleTrackInfo>()
         val videoTrack =
             request.preferredVideoTrackId
                 ?.let { requested -> videoTracks.firstOrNull { it.id == requested } }
@@ -122,11 +113,38 @@ public class BundledFfmpegNativeDriver private constructor(
                     ?: audioTracks.firstOrNull(AudioTrackInfo::isDefault)
                     ?: audioTracks.firstOrNull()
             }
+        val subtitleTrack =
+            if (request.subtitleHandling == SubtitleHandling.OMIT) {
+                null
+            } else {
+                request.preferredSubtitleTrackId
+                    ?.let { requested -> subtitleTracks.firstOrNull { it.id == requested } }
+                    ?: subtitleTracks.firstOrNull(SubtitleTrackInfo::isDefault)
+                    ?: subtitleTracks.firstOrNull()
+            }
         if (request.preferredVideoTrackId != null && videoTrack.id != request.preferredVideoTrackId) {
             throw MediaBridgeException(MediaBridgeErrorCode.UNSUPPORTED_REQUEST, "The requested video track is unavailable.")
         }
         if (request.preferredAudioTrackId != null && audioTrack?.id != request.preferredAudioTrackId) {
             throw MediaBridgeException(MediaBridgeErrorCode.UNSUPPORTED_REQUEST, "The requested audio track is unavailable.")
+        }
+        if (request.preferredSubtitleTrackId != null && subtitleTrack?.id != request.preferredSubtitleTrackId) {
+            throw MediaBridgeException(MediaBridgeErrorCode.UNSUPPORTED_REQUEST, "The requested subtitle track is unavailable.")
+        }
+        if (request.subtitleHandling == SubtitleHandling.BURN_IN) {
+            if (subtitleTrack == null || subtitleTrack.isImageBased) {
+                throw MediaBridgeException(
+                    MediaBridgeErrorCode.UNSUPPORTED_REQUEST,
+                    "Subtitle burn-in currently accepts text ASS, SSA, SRT, WebVTT, or mov_text tracks only.",
+                )
+            }
+            if (videoTrack.colorInfo.dynamicRange != DynamicRangeFormat.SDR) {
+                throw MediaBridgeException(
+                    MediaBridgeErrorCode.UNSUPPORTED_REQUEST,
+                    "Subtitle burn-in refuses HDR, HLG, Dolby Vision, and ambiguous color signals until the " +
+                        "controlled 10-bit compositor is available.",
+                )
+            }
         }
         val outputInfo =
             MediaOutputInfo(
@@ -135,9 +153,14 @@ public class BundledFfmpegNativeDriver private constructor(
                 subtitleHandling = request.subtitleHandling,
                 selectedVideoTrackId = videoTrack.id,
                 selectedAudioTrackId = audioTrack?.id,
-                selectedSubtitleTrackId = null,
+                selectedSubtitleTrackId = subtitleTrack?.id,
                 inputColorInfo = videoTrack.colorInfo,
-                outputColorInfo = videoTrack.colorInfo,
+                outputColorInfo =
+                    if (request.subtitleHandling == SubtitleHandling.BURN_IN) {
+                        SDR_BT709_COLOR_INFO
+                    } else {
+                        videoTrack.colorInfo
+                    },
             )
         return DesktopFfmpegSession(runtime, input, request, outputInfo)
     }
@@ -167,18 +190,32 @@ public class BundledFfmpegNativeDriver private constructor(
             input.requestHeaders.isNotEmpty() -> "Request headers are only supported for remote inputs."
             request.output != BridgeOutput.CMAF_FRAGMENT_STREAM ->
                 "The selected desktop driver currently emits a CMAF fragment stream."
-            request.videoHandling != VideoHandling.COPY ->
-                "The selected runtime copies compressed video and does not tone-map it."
+            request.subtitleHandling == SubtitleHandling.BURN_IN && !capabilities.canBurnSubtitles ->
+                "The selected runtime does not include the optional libass subtitle burn-in pipeline."
+            request.subtitleHandling == SubtitleHandling.BURN_IN && request.videoHandling != VideoHandling.TRANSCODE_TO_SDR ->
+                "Subtitle burn-in requires explicit TRANSCODE_TO_SDR video handling."
+            request.subtitleHandling == SubtitleHandling.OMIT && request.videoHandling != VideoHandling.COPY ->
+                "The selected runtime copies compressed video unless subtitle burn-in is requested."
             request.audioHandling !in setOf(AudioHandling.OMIT, AudioHandling.COPY) ->
                 "The selected runtime currently copies or omits audio."
-            request.subtitleHandling != SubtitleHandling.OMIT ->
-                "The selected runtime does not burn subtitle tracks into video."
+            request.subtitleHandling == SubtitleHandling.BURN_IN && request.preferredSubtitleTrackId == null ->
+                "Subtitle burn-in requires an explicitly selected subtitle track."
             request.dolbyVisionHandling != DolbyVisionHandling.PRESERVE ->
                 "Dolby Vision conversion requires the separate optional converter module."
             else -> null
         }
 
     public companion object {
+        private val SDR_BT709_COLOR_INFO =
+            VideoColorInfo(
+                dynamicRange = DynamicRangeFormat.SDR,
+                bitDepth = 8,
+                range = ColorRange.LIMITED,
+                primaries = ColorPrimaries.BT709,
+                transfer = ColorTransfer.BT709,
+                matrix = ColorMatrix.BT709,
+            )
+
         private val defaultInstance: BundledFfmpegNativeDriver by lazy(LazyThreadSafetyMode.SYNCHRONIZED) { load() }
 
         /** Loads the packaged runtime once and reuses it across probes, seeks, and playback sessions. */
@@ -301,26 +338,41 @@ private class DesktopFfmpegSession(
                 launch(Dispatchers.IO) {
                     try {
                         val nativeContext = currentCoroutineContext()
-                        runtime.remuxFragmentedMp4(
-                            inputLocator = input.locator,
-                            fragmentDurationUs = request.fragmentDurationUs,
-                            startTimeUs = active.positionUs,
-                            preferredVideoTrackId = outputInfo.selectedVideoTrackId ?: -1,
-                            preferredAudioTrackId = outputInfo.selectedAudioTrackId ?: -2,
-                        ) { bytes ->
+                        val consumeBytes: (ByteArray) -> Boolean = { bytes ->
                             if (cancelled.get() || !nativeContext.isActive) {
-                                return@remuxFragmentedMp4 false
-                            }
-                            try {
-                                val framed = framer.accept(bytes)
-                                runBlocking {
-                                    framed.forEach { send(it) }
-                                }
-                                true
-                            } catch (_: CancellationException) {
-                                cancelled.set(true)
                                 false
+                            } else {
+                                try {
+                                    val framed = framer.accept(bytes)
+                                    runBlocking {
+                                        framed.forEach { send(it) }
+                                    }
+                                    true
+                                } catch (_: CancellationException) {
+                                    cancelled.set(true)
+                                    false
+                                }
                             }
+                        }
+                        if (outputInfo.subtitleHandling == SubtitleHandling.BURN_IN) {
+                            runtime.burnSubtitlesFragmentedMp4(
+                                inputLocator = input.locator,
+                                fragmentDurationUs = request.fragmentDurationUs,
+                                startTimeUs = active.positionUs,
+                                preferredVideoTrackId = outputInfo.selectedVideoTrackId ?: -1,
+                                preferredAudioTrackId = outputInfo.selectedAudioTrackId ?: -2,
+                                preferredSubtitleTrackId = outputInfo.selectedSubtitleTrackId ?: -1,
+                                consumer = consumeBytes,
+                            )
+                        } else {
+                            runtime.remuxFragmentedMp4(
+                                inputLocator = input.locator,
+                                fragmentDurationUs = request.fragmentDurationUs,
+                                startTimeUs = active.positionUs,
+                                preferredVideoTrackId = outputInfo.selectedVideoTrackId ?: -1,
+                                preferredAudioTrackId = outputInfo.selectedAudioTrackId ?: -2,
+                                consumer = consumeBytes,
+                            )
                         }
 
                         if (!cancelled.get()) {

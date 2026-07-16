@@ -5,7 +5,7 @@ project(kmediabridge LANGUAGES C)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat libavcodec libavutil)
 
-add_library(kmediabridge SHARED src/kmedia_bridge.c)
+add_library(kmediabridge SHARED src/kmedia_bridge.c src/kmedia_bridge_subtitles.c)
 target_include_directories(kmediabridge PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(kmediabridge PRIVATE PkgConfig::FFMPEG)
 target_compile_features(kmediabridge PRIVATE c_std_11)

@@ -145,9 +145,50 @@ def verify_manifest(root: Path) -> dict:
         fail("The native recipe FFmpeg version differs from the manifest.")
     if f'source_sha256="{ffmpeg.get("sourceSha256")}"' not in recipe:
         fail("The native recipe FFmpeg source hash differs from the manifest.")
+    runtime_inspector = (root / "scripts/inspect_native_runtime.py").read_text(encoding="utf-8")
+    if "_KMB_MAJOR" not in recipe or "LIBAVFORMAT_KMB_" not in runtime_inspector:
+        fail("The private ELF FFmpeg symbol-version boundary is missing from the recipe or inspector.")
     release_verifier = (root / "scripts/verify_ffmpeg_release.sh").read_text(encoding="utf-8")
     if "FCF986EA15E6E293A5644F10B4322F04D67658D8" not in release_verifier:
         fail("The official FFmpeg release signing-key fingerprint is not pinned.")
+    return manifest
+
+
+def verify_subtitle_manifest(root: Path) -> dict:
+    manifest_path = root / "compliance/subtitles/manifest.json"
+    embedded_path = (
+        root
+        / "ffmpeg/src/commonMain/resources/META-INF/kmediabridge/compliance/subtitle-components.json"
+    )
+    manifest = load_json(manifest_path)
+    embedded = load_json(embedded_path)
+    if manifest != embedded:
+        fail("The embedded subtitle component manifest differs from compliance evidence.")
+    if manifest.get("schemaVersion") != 1:
+        fail("Unsupported subtitle component manifest schema.")
+    if manifest.get("linkage") != "static-pic-into-replaceable-lgpl-avfilter":
+        fail("The subtitle component linkage boundary is not declared correctly.")
+    allowed_licenses = {"FTL", "LGPL-2.1-or-later", "MIT", "ISC", "Zlib"}
+    components = manifest.get("components", [])
+    if {item.get("name") for item in components} != {
+        "FreeType",
+        "FriBidi library",
+        "HarfBuzz",
+        "libunibreak",
+        "libass",
+    }:
+        fail("The subtitle component inventory differs from the reviewed set.")
+    recipe = (root / "native/build-subtitle-deps-unix.sh").read_text(encoding="utf-8")
+    for component in components:
+        if component.get("license") not in allowed_licenses:
+            fail(f"Unreviewed subtitle component license: {component.get('license')!r}")
+        source_url = str(component.get("sourceUrl", ""))
+        source_sha256 = str(component.get("sourceSha256", ""))
+        require_public_https_url(f"{component.get('name')} source URL", source_url)
+        if not SHA256.fullmatch(source_sha256):
+            fail(f"{component.get('name')} source SHA-256 is missing or malformed.")
+        if source_url not in recipe or source_sha256 not in recipe:
+            fail(f"{component.get('name')} source identity differs from the build recipe.")
     return manifest
 
 
@@ -216,6 +257,7 @@ def main() -> int:
     try:
         verify_headers(root)
         manifest = verify_manifest(root)
+        verify_subtitle_manifest(root)
         verify_payload_boundary(root, manifest)
         verify_required_files(root, manifest)
     except AssertionError as error:

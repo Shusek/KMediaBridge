@@ -95,6 +95,8 @@ val verifyPublications =
                 .dir("compliance-repository")
                 .get()
                 .asFile.absolutePath,
+            "--version",
+            publicationVersion.get(),
         )
     }
 

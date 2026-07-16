@@ -48,6 +48,7 @@ public data class FfmpegHlsPlaybackRequest(
     public val input: MediaInput,
     public val selectedVideoTrackId: Int? = null,
     public val selectedAudioTrackId: Int? = null,
+    public val selectedSubtitleTrackId: Int? = null,
     public val startTimeUs: Long = 0L,
     public val fragmentDurationUs: Long = 4_000_000L,
     public val maxBufferedFragments: Int = 12,
@@ -99,12 +100,23 @@ public object BundledFfmpegHlsPlaybackBackend {
                 request.input,
                 BridgeRequest(
                     output = BridgeOutput.CMAF_FRAGMENT_STREAM,
-                    videoHandling = VideoHandling.COPY,
+                    videoHandling =
+                        if (request.selectedSubtitleTrackId == null) {
+                            VideoHandling.COPY
+                        } else {
+                            VideoHandling.TRANSCODE_TO_SDR
+                        },
                     audioHandling = AudioHandling.COPY,
-                    subtitleHandling = SubtitleHandling.OMIT,
+                    subtitleHandling =
+                        if (request.selectedSubtitleTrackId == null) {
+                            SubtitleHandling.OMIT
+                        } else {
+                            SubtitleHandling.BURN_IN
+                        },
                     fragmentDurationUs = request.fragmentDurationUs,
                     preferredVideoTrackId = request.selectedVideoTrackId,
                     preferredAudioTrackId = request.selectedAudioTrackId,
+                    preferredSubtitleTrackId = request.selectedSubtitleTrackId,
                 ),
             )
         if (request.startTimeUs > 0L) bridgeSession.seekTo(request.startTimeUs)

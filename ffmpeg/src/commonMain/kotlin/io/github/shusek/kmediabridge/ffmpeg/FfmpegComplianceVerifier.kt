@@ -19,6 +19,7 @@ public object FfmpegComplianceVerifier {
             "BSD-2-Clause",
             "BSD-3-Clause",
             "BSL-1.0",
+            "FTL",
             "ISC",
             "LGPL-2.1-or-later",
             "LGPL-3.0-or-later",

@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define KMB_ABI_VERSION 3
+#define KMB_ABI_VERSION 4
 
 typedef enum KmbResult {
     KMB_OK = 0,
@@ -37,6 +37,7 @@ KMB_EXPORT uint32_t kmb_abi_version(void);
 KMB_EXPORT const char *kmb_ffmpeg_version(void);
 KMB_EXPORT const char *kmb_ffmpeg_license(void);
 KMB_EXPORT const char *kmb_ffmpeg_configuration(void);
+KMB_EXPORT const char *kmb_runtime_features_json(void);
 
 /*
  * Returns a newly allocated UTF-8 JSON document in output_json.
@@ -62,6 +63,24 @@ KMB_EXPORT KmbResult kmb_remux_fragmented_mp4_stream(
     int64_t start_time_us,
     int32_t preferred_video_track_id,
     int32_t preferred_audio_track_id,
+    KmbWriteCallback write_callback,
+    void *opaque,
+    char **output_error
+);
+
+/*
+ * Decodes one SDR video track, composites one text subtitle track through
+ * libass, encodes AVC, and streams fragmented MP4. Runtimes that do not carry
+ * this optional pipeline return KMB_UNSUPPORTED and advertise the same fact in
+ * manifest.properties. HDR/HLG/Dolby Vision input is rejected by design.
+ */
+KMB_EXPORT KmbResult kmb_burn_subtitles_fragmented_mp4_stream(
+    const char *input_locator,
+    int64_t fragment_duration_us,
+    int64_t start_time_us,
+    int32_t preferred_video_track_id,
+    int32_t preferred_audio_track_id,
+    int32_t preferred_subtitle_track_id,
     KmbWriteCallback write_callback,
     void *opaque,
     char **output_error

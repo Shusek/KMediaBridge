@@ -304,6 +304,14 @@ const char *kmb_ffmpeg_configuration(void) {
     return avformat_configuration();
 }
 
+const char *kmb_runtime_features_json(void) {
+#if defined(KMB_ENABLE_SUBTITLE_BURN_IN)
+    return "{\"subtitleBurnIn\":true}";
+#else
+    return "{\"subtitleBurnIn\":false}";
+#endif
+}
+
 KmbResult kmb_probe_json(const char *input_locator, char **output_json, char **output_error) {
     AVFormatContext *input = NULL;
     AVBPrint json;

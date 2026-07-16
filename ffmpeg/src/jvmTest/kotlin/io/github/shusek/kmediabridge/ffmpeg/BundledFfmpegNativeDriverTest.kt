@@ -3,9 +3,16 @@
 package io.github.shusek.kmediabridge.ffmpeg
 
 import io.github.shusek.kmediabridge.BridgeRequest
+import io.github.shusek.kmediabridge.ColorMatrix
+import io.github.shusek.kmediabridge.ColorPrimaries
+import io.github.shusek.kmediabridge.ColorRange
+import io.github.shusek.kmediabridge.ColorTransfer
+import io.github.shusek.kmediabridge.DynamicRangeFormat
 import io.github.shusek.kmediabridge.MediaBridgeEvent
 import io.github.shusek.kmediabridge.MediaInput
 import io.github.shusek.kmediabridge.MediaInputKind
+import io.github.shusek.kmediabridge.SubtitleHandling
+import io.github.shusek.kmediabridge.SubtitleTrackInfo
 import io.github.shusek.kmediabridge.VideoHandling
 import io.github.shusek.kmediabridge.VideoTrackInfo
 import kotlinx.coroutines.flow.first
@@ -109,6 +116,78 @@ class BundledFfmpegNativeDriverTest {
                     )
                 } finally {
                     session.closeAsync()
+                }
+            } finally {
+                input.deleteIfExists()
+            }
+        }
+
+    @Test
+    fun burnsSelectedTextSubtitleIntoSdrCmafWhenFullRuntimeIsPresent() =
+        runTest {
+            val platform = hostPlatformId() ?: return@runTest
+            val loader = BundledFfmpegNativeDriverTest::class.java.classLoader
+            if (loader.getResource("META-INF/kmediabridge/native/$platform/manifest.properties") == null) {
+                return@runTest
+            }
+
+            val driver = BundledFfmpegNativeDriver.load(classLoader = loader)
+            if (!driver.capabilities.canBurnSubtitles) return@runTest
+
+            val input = Files.createTempFile("kmediabridge-subtitle-test-", ".mkv")
+            try {
+                val encoded =
+                    loader
+                        .getResourceAsStream("kmediabridge-subtitle-test.mkv.b64")!!
+                        .bufferedReader()
+                        .readText()
+                Files.write(input, Base64.getMimeDecoder().decode(encoded))
+                val mediaInput = MediaInput(input.toString(), MediaInputKind.FILE)
+                val subtitle =
+                    driver
+                        .probe(mediaInput)
+                        .tracks
+                        .filterIsInstance<SubtitleTrackInfo>()
+                        .single()
+                val session =
+                    driver.open(
+                        mediaInput,
+                        BridgeRequest(
+                            videoHandling = VideoHandling.TRANSCODE_TO_SDR,
+                            subtitleHandling = SubtitleHandling.BURN_IN,
+                            preferredSubtitleTrackId = subtitle.id,
+                            fragmentDurationUs = 500_000L,
+                        ),
+                    )
+                val events = mutableListOf<MediaBridgeEvent>()
+                session.events.onEach(events::add).first { it is MediaBridgeEvent.EndOfStream }
+                session.close()
+
+                val output = events.filterIsInstance<MediaBridgeEvent.OutputConfigured>().single().value
+                assertEquals(VideoHandling.TRANSCODE_TO_SDR, output.videoHandling)
+                assertEquals(SubtitleHandling.BURN_IN, output.subtitleHandling)
+                assertEquals(subtitle.id, output.selectedSubtitleTrackId)
+                assertEquals(8, output.outputColorInfo?.bitDepth)
+                val fragments = events.filterIsInstance<MediaBridgeEvent.Fragment>().map { it.value }
+                assertTrue(fragments.first().isInitialization)
+                assertTrue(fragments.drop(1).any { !it.isInitialization && it.bytes.isNotEmpty() })
+
+                val rendered = Files.createTempFile("kmediabridge-subtitle-output-", ".mp4")
+                try {
+                    Files.newOutputStream(rendered).use { destination ->
+                        fragments.forEach { destination.write(it.bytes) }
+                    }
+                    val renderedProbe = driver.probe(MediaInput(rendered.toString(), MediaInputKind.FILE))
+                    val renderedVideo = renderedProbe.tracks.filterIsInstance<VideoTrackInfo>().single()
+                    assertEquals(DynamicRangeFormat.SDR, renderedVideo.colorInfo.dynamicRange)
+                    assertEquals(8, renderedVideo.colorInfo.bitDepth)
+                    assertEquals(ColorRange.LIMITED, renderedVideo.colorInfo.range)
+                    assertEquals(ColorPrimaries.BT709, renderedVideo.colorInfo.primaries)
+                    assertEquals(ColorTransfer.BT709, renderedVideo.colorInfo.transfer)
+                    assertEquals(ColorMatrix.BT709, renderedVideo.colorInfo.matrix)
+                    assertTrue(renderedProbe.tracks.none { it is SubtitleTrackInfo })
+                } finally {
+                    rendered.deleteIfExists()
                 }
             } finally {
                 input.deleteIfExists()

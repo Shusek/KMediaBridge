@@ -2,7 +2,9 @@
 
 KMediaBridge is a Kotlin Multiplatform media bridge with an optional, bundled
 FFmpeg runtime. It probes local media and losslessly remuxes Matroska/WebM,
-MP4/fMP4, and MPEG-TS into a streamed fragmented-MP4/CMAF output.
+MP4/fMP4, and MPEG-TS into a streamed fragmented-MP4/CMAF output. The macOS
+desktop flavor can additionally decode SDR video, compose a selected text
+subtitle track with libass, and encode tagged BT.709 CMAF through VideoToolbox.
 
 There is no `ffmpeg`/`ffprobe` process and no system FFmpeg prerequisite. The
 desktop artifact contains dynamically linked native libraries built from the
@@ -70,6 +72,11 @@ identity, but it does not certify a caller-provided payload for redistribution.
 `driver.runtimeInfo.origin`, `complianceScope`, `ffmpegLicenseSpdx`, and
 `configureArguments` report what was actually selected.
 
+Capability discovery does not have to load native code. Use
+`DesktopFfmpegRuntimeInspector.inspect()` to validate only the selected
+manifest; the libraries are extracted and loaded only if the player actually
+selects this backend.
+
 For a desktop player that consumes HLS, the JVM adapter owns the bounded
 loopback origin as well:
 
@@ -78,6 +85,8 @@ val playback = BundledFfmpegHlsPlaybackBackend.start(
     FfmpegHlsPlaybackRequest(
         input = MediaInput("/media/movie.mkv", MediaInputKind.FILE),
         selectedAudioTrackId = 2,
+        // Optional on a subtitle-capable runtime; text is rendered into SDR video.
+        selectedSubtitleTrackId = 3,
     ),
 )
 player.open(playback.source.playlistUrl)
@@ -105,14 +114,26 @@ configure line before it accepts media.
 - restarts from a preceding keyframe after seek;
 - preserves codec color and HDR metadata that FFmpeg can carry through this
   remux path.
+- on macOS, optionally burns selected ASS/SSA/SRT/WebVTT/mov_text into an SDR
+  BT.709 AVC output using libass plus VideoToolbox.
 
-It does not itself render HDR, tone-map or transcode video, transcode audio,
-burn subtitles, convert Dolby Vision profile 7, handle remote/DRM/live input,
-or certify Dolby Vision. Unsupported requests fail with a typed error rather
-than silently producing unmanaged color. KMediaPlayer still chooses and
-confirms the actual AVFoundation/Media Foundation/GStreamer/rendering path
-after receiving the fMP4 stream. Android and Apple Kotlin/Native payloads
-remain separate future artifacts; the bundled 0.3.0 runtime is for desktop JVM.
+It does not burn bitmap subtitles, compose subtitles into HDR/HLG/Dolby Vision,
+tone-map, transcode audio, convert Dolby Vision profile 7, handle
+remote/DRM/live input, or certify Dolby Vision. HDR subtitle requests are
+rejected rather than silently flattened or mislabeled. Linux and Windows keep
+the remux-only flavor until their reviewed native encoders are enabled.
+KMediaPlayer still chooses and confirms the actual AVFoundation/Media
+Foundation/GStreamer/rendering path after receiving the fMP4 stream. Android
+and Apple Kotlin/Native payloads remain separate future artifacts; the bundled
+0.3.0 runtime is for desktop JVM.
+
+The FFmpeg dylib/SONAME/DLL names use a private `-kmb` suffix. Native loading is
+local rather than process-global; Darwin additionally uses first-image symbol
+lookup, while ELF builds require private `LIBAV*_KMB_*` symbol versions. This
+lets an in-process libVLC backend coexist without binding to KMediaBridge's
+FFmpeg (or the reverse). Loading both still consumes memory, so KMediaPlayer
+selects one fallback for a request and the manifest-only inspection avoids eager
+loading.
 
 ## LGPL distribution and external runtimes
 

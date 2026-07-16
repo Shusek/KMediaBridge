@@ -34,6 +34,11 @@ The following requirements apply to payloads published by KMediaBridge:
 - Record the complete configure line and every linked component.
 - Query the built libraries for their reported license and configuration;
   never trust a filename or a manually entered label alone.
+- Keep the optional subtitle stack limited to the pinned FTL/LGPL/MIT/Zlib/ISC
+  components in `compliance/subtitles/manifest.json`. FriBidi tools are GPL and
+  are not built or conveyed; only its LGPL library is linked.
+- A subtitle-capable payload must report `subtitleBurnIn=true` from the native
+  ABI and carry matching manifest capabilities. The loader rejects a mismatch.
 
 ## Required payload evidence
 
