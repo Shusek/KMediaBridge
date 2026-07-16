@@ -77,6 +77,26 @@ val verifyCompliance =
         )
     }
 
+val testRuntimeInspectionLogic =
+    tasks.register<Exec>("testRuntimeInspectionLogic") {
+        group = "verification"
+        description = "Runs regression tests for native runtime dependency inspection."
+        inputs.files(
+            layout.projectDirectory.file("scripts/inspect_native_runtime.py"),
+            layout.projectDirectory.file("scripts/test_inspect_native_runtime.py"),
+        )
+        commandLine(
+            pythonExecutable,
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "scripts",
+            "-p",
+            "test_*.py",
+        )
+    }
+
 val verifyPublications =
     tasks.register<Exec>("verifyPublications") {
         group = "verification"
@@ -104,6 +124,7 @@ tasks.named("check") {
     dependsOn(":api:check", ":ffmpeg:check", ":ffmpeg-runtime-desktop:check")
     dependsOn(verifyCompliance)
     dependsOn(generateComplianceSbom)
+    dependsOn(testRuntimeInspectionLogic)
 }
 
 tasks.register("complianceCheck") {
@@ -111,4 +132,5 @@ tasks.register("complianceCheck") {
     dependsOn(verifyCompliance)
     dependsOn(verifyPublications)
     dependsOn(generateComplianceSbom)
+    dependsOn(testRuntimeInspectionLogic)
 }

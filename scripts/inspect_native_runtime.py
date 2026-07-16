@@ -25,6 +25,34 @@ PRIVATE_FFMPEG_IDENTITY = re.compile(
 )
 
 
+def inspect_ffmpeg_dependency_identities(dependencies: str, target: str) -> list[str]:
+    dependency_lines = dependencies.splitlines()
+    if target == "windows":
+        # PE objdump also prints imported symbol names such as avformat_open_input.
+        # Only DLL Name records describe the load-time library identity.
+        dependency_lines = [line for line in dependency_lines if "dll name:" in line.lower()]
+
+    ffmpeg_dependency_lines = [
+        line
+        for line in dependency_lines
+        if any(
+            name.removeprefix("lib") in line.lower()
+            for name in REQUIRED_DYNAMIC_LIBRARIES + SUBTITLE_DYNAMIC_LIBRARIES
+        )
+    ]
+    linked = [
+        name
+        for name in REQUIRED_DYNAMIC_LIBRARIES + SUBTITLE_DYNAMIC_LIBRARIES
+        if any(name.removeprefix("lib") in line.lower() for line in ffmpeg_dependency_lines)
+    ]
+    if not set(REQUIRED_DYNAMIC_LIBRARIES).issubset(linked):
+        missing = sorted(set(REQUIRED_DYNAMIC_LIBRARIES) - set(linked))
+        raise RuntimeError(f"required dynamic FFmpeg libraries are missing: {missing}")
+    if not all(PRIVATE_FFMPEG_IDENTITY.search(line) for line in ffmpeg_dependency_lines):
+        raise RuntimeError("FFmpeg dependencies do not use private -kmb identities")
+    return linked
+
+
 def inspect_dynamic_linking(library_path: Path, target: str) -> list[str]:
     if target == "windows":
         objdump = shutil.which("x86_64-w64-mingw32-objdump") or shutil.which("objdump")
@@ -67,21 +95,7 @@ def inspect_dynamic_linking(library_path: Path, target: str) -> list[str]:
     else:
         raise RuntimeError(f"Dynamic dependency inspection is not implemented for {sys.platform}")
 
-    linked = [
-        name
-        for name in REQUIRED_DYNAMIC_LIBRARIES + SUBTITLE_DYNAMIC_LIBRARIES
-        if name.removeprefix("lib") in dependencies
-    ]
-    if not set(REQUIRED_DYNAMIC_LIBRARIES).issubset(linked):
-        missing = sorted(set(REQUIRED_DYNAMIC_LIBRARIES) - set(linked))
-        raise RuntimeError(f"required dynamic FFmpeg libraries are missing: {missing}")
-    ffmpeg_dependency_lines = [
-        line
-        for line in dependencies.splitlines()
-        if any(name.removeprefix("lib") in line for name in REQUIRED_DYNAMIC_LIBRARIES + SUBTITLE_DYNAMIC_LIBRARIES)
-    ]
-    if not ffmpeg_dependency_lines or not all(PRIVATE_FFMPEG_IDENTITY.search(line) for line in ffmpeg_dependency_lines):
-        raise RuntimeError("FFmpeg dependencies do not use private -kmb identities")
+    linked = inspect_ffmpeg_dependency_identities(dependencies, target)
     if sys.platform.startswith("linux") and target != "windows":
         version_info = subprocess.run(
             ["readelf", "--version-info", str(library_path)],
