@@ -38,14 +38,14 @@ jobs:
           fi
           test "$(git tag --points-at HEAD)" = "v${{ inputs.version }}"
       - name: Download the already released native resources
-        env:
-          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/native-resources"
-          gh release download "v${{ inputs.version }}" \
-            --pattern "kmedia-bridge-${{ inputs.version }}-native-resources.tar.gz" \
-            --dir "$RUNNER_TEMP"
+          archive="$RUNNER_TEMP/kmedia-bridge-${{ inputs.version }}-native-resources.tar.gz"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --retry 3 --retry-all-errors \
+            --output "$archive" \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/v${{ inputs.version }}/kmedia-bridge-${{ inputs.version }}-native-resources.tar.gz"
           tar -xzf "$RUNNER_TEMP/kmedia-bridge-${{ inputs.version }}-native-resources.tar.gz" \
             -C "$RUNNER_TEMP/native-resources"
       - name: Run release gates
