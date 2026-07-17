@@ -1,0 +1,80 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "io.github.shusek",
+    "module": "kmedia-bridge-ffmpeg-runtime-desktop",
+    "version": "0.4.1",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.6.1"
+    }
+  },
+  "variants": [
+    {
+      "name": "apiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.version": 17,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api"
+      },
+      "files": [
+        {
+          "name": "kmedia-bridge-ffmpeg-runtime-desktop-0.4.1.jar",
+          "url": "kmedia-bridge-ffmpeg-runtime-desktop-0.4.1.jar",
+          "size": 10074422,
+          "sha512": "607e3c1d6089544b9073e3c1073e5ce97284d0f5d195add8ea0088c9d15fc122a0d63155b127315475fbc102e0bad0db36246792419369f61473d5df6ad1239f",
+          "sha256": "71fc55cde37b48d39ad9a68baa6aa79f051ceddd42199e128b0f5ecd57847722",
+          "sha1": "b82e701f0b6f994fb4a9c5be581fc0a58f18ea8b",
+          "md5": "beee61102ad360d2977e2aceb7c56552"
+        }
+      ]
+    },
+    {
+      "name": "runtimeElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.version": 17,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "kmedia-bridge-ffmpeg-runtime-desktop-0.4.1.jar",
+          "url": "kmedia-bridge-ffmpeg-runtime-desktop-0.4.1.jar",
+          "size": 10074422,
+          "sha512": "607e3c1d6089544b9073e3c1073e5ce97284d0f5d195add8ea0088c9d15fc122a0d63155b127315475fbc102e0bad0db36246792419369f61473d5df6ad1239f",
+          "sha256": "71fc55cde37b48d39ad9a68baa6aa79f051ceddd42199e128b0f5ecd57847722",
+          "sha1": "b82e701f0b6f994fb4a9c5be581fc0a58f18ea8b",
+          "md5": "beee61102ad360d2977e2aceb7c56552"
+        }
+      ]
+    },
+    {
+      "name": "sourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "kmedia-bridge-ffmpeg-runtime-desktop-0.4.1-sources.jar",
+          "url": "kmedia-bridge-ffmpeg-runtime-desktop-0.4.1-sources.jar",
+          "size": 10063378,
+          "sha512": "d01b0c3fd3c3124b2195240b40d337c33ea2f744fe50d4a73320b277beed6ea0c8f2387ee274194861914afe69020c6d2fe50a5a2ba8f4f1409c17d56e34877e",
+          "sha256": "35ad4aea965dd5d8ff0464f837b48358916bfbf60d4ae7e91dbb790d9bfd880c",
+          "sha1": "f3210d3dbb00b45250375de6cc71c1dee738b14e",
+          "md5": "98b3e60d2b0a3e98cdfe2bbd2fe9cd42"
+        }
+      ]
+    }
+  ]
+}
