@@ -1,0 +1,96 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "io.github.shusek",
+    "module": "kmedia-bridge-ffmpeg-runtime-android",
+    "version": "0.4.2",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.6.1"
+    }
+  },
+  "variants": [
+    {
+      "name": "releaseVariantReleaseApiPublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.10"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kmedia-bridge-ffmpeg-runtime-android-0.4.2.aar",
+          "url": "kmedia-bridge-ffmpeg-runtime-android-0.4.2.aar",
+          "size": 7707188,
+          "sha512": "367f22c8a2e12054763e2cd35b29b20516c930cd4142fcdee0fb610cbb42113ba5bf6c51cc210db5781e024f93df0f18c9f3773bd3972211334f7dd16ee7da22",
+          "sha256": "edfe2e63e059db59bcf37e34d158d3248d4759f1b08f6b5657206e6396fca49a",
+          "sha1": "f07cd570716072a74a99efcd0ccc79079cc5a117",
+          "md5": "9a78e1658440c354e915858426653fa9"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseRuntimePublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.10"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kmedia-bridge-ffmpeg-runtime-android-0.4.2.aar",
+          "url": "kmedia-bridge-ffmpeg-runtime-android-0.4.2.aar",
+          "size": 7707188,
+          "sha512": "367f22c8a2e12054763e2cd35b29b20516c930cd4142fcdee0fb610cbb42113ba5bf6c51cc210db5781e024f93df0f18c9f3773bd3972211334f7dd16ee7da22",
+          "sha256": "edfe2e63e059db59bcf37e34d158d3248d4759f1b08f6b5657206e6396fca49a",
+          "sha1": "f07cd570716072a74a99efcd0ccc79079cc5a117",
+          "md5": "9a78e1658440c354e915858426653fa9"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseSourcePublication",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "kmedia-bridge-ffmpeg-runtime-android-0.4.2-sources.jar",
+          "url": "kmedia-bridge-ffmpeg-runtime-android-0.4.2-sources.jar",
+          "size": 261,
+          "sha512": "1487e5a20c9e4d74f298e07c42e96a61be11b7a768c3fbc199ee138cd68e1fc2267d1cfe3f11f288acc05df755315344d052cc5f6f751f126ab4fe1caa5125ea",
+          "sha256": "c6deada2fac53b8ea6523dbda77597b128006674616f140f04df23264c6d1aa3",
+          "sha1": "2ad14aed781c4a73ed4dbb421966d408a0a06686",
+          "md5": "f43436d6bec321290f6af228ad602604"
+        }
+      ]
+    }
+  ]
+}
