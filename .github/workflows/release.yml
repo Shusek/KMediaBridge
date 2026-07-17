@@ -1,0 +1,291 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  native:
+    name: Build native payload (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            runner: ubuntu-24.04
+            build: ./native/build-ffmpeg-unix.sh
+            runnable: true
+          - platform: macos-aarch64
+            runner: macos-15
+            build: ./native/build-ffmpeg-unix.sh
+            runnable: true
+          - platform: macos-x86_64
+            runner: macos-15-intel
+            build: ./native/build-ffmpeg-unix.sh
+            runnable: true
+          - platform: windows-x86_64
+            runner: ubuntu-24.04
+            build: ./native/build-ffmpeg-windows-x64.sh
+            runnable: false
+    steps:
+      - name: Check out the immutable tag
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+      - name: Validate stable version
+        id: version
+        shell: bash
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Only stable vMAJOR.MINOR.PATCH tags may publish." >&2
+            exit 1
+          fi
+          echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Install the Windows cross toolchain
+        if: matrix.platform == 'windows-x86_64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes gcc-mingw-w64-x86-64 gnupg
+      - name: Install GnuPG on Linux
+        if: matrix.platform == 'linux-x86_64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes gnupg
+      - name: Install signed-source and subtitle build tools on macOS
+        if: startsWith(matrix.platform, 'macos-')
+        run: brew install gnupg meson ninja pkgconf
+      - name: Verify the signed FFmpeg source release
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/native-work"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$RUNNER_TEMP/native-work/ffmpeg-8.1.2.tar.xz" \
+            https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$RUNNER_TEMP/ffmpeg-8.1.2.tar.xz.asc" \
+            https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz.asc
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$RUNNER_TEMP/ffmpeg-devel.asc" \
+            https://ffmpeg.org/ffmpeg-devel.asc
+          ./scripts/verify_ffmpeg_release.sh \
+            "$RUNNER_TEMP/native-work/ffmpeg-8.1.2.tar.xz" \
+            "$RUNNER_TEMP/ffmpeg-8.1.2.tar.xz.asc" \
+            "$RUNNER_TEMP/ffmpeg-devel.asc"
+      - name: Build and inspect the LGPL runtime
+        shell: bash
+        run: |
+          if [[ "${{ matrix.platform }}" == macos-* ]]; then
+            ./native/build-ffmpeg-unix.sh \
+              "$RUNNER_TEMP/native-work" "$RUNNER_TEMP/native-dist" subtitle-sdr
+          else
+            ${{ matrix.build }} "$RUNNER_TEMP/native-work" "$RUNNER_TEMP/native-dist"
+          fi
+      - name: Package classpath runtime resources
+        run: >-
+          python3 scripts/package_native_runtime.py
+          --dist "$RUNNER_TEMP/native-dist"
+          --platform "${{ matrix.platform }}"
+          --resources "$RUNNER_TEMP/native-resources"
+          --release-version "${{ steps.version.outputs.value }}"
+          --revision "${{ github.sha }}"
+      - name: Set up Java for the JVM integration test
+        if: matrix.runnable
+        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: Exercise the packaged runtime
+        if: matrix.runnable
+        run: >-
+          ./gradlew --no-daemon :ffmpeg:jvmTest
+          -PnativePayloadDirectory="$RUNNER_TEMP/native-resources"
+      - name: Assemble a replaceable platform bundle
+        shell: bash
+        run: |
+          archive="$RUNNER_TEMP/kmedia-bridge-${{ steps.version.outputs.value }}-${{ matrix.platform }}.tar.gz"
+          tar -czf "$archive" \
+            --exclude='compliance/source' \
+            --exclude='compliance/subtitle-components/source' \
+            -C "$RUNNER_TEMP/native-dist" lib include compliance
+      - name: Upload classpath resources
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: native-resources-${{ matrix.platform }}
+          path: ${{ runner.temp }}/native-resources
+          if-no-files-found: error
+      - name: Upload the platform bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: native-bundle-${{ matrix.platform }}
+          path: ${{ runner.temp }}/kmedia-bridge-${{ steps.version.outputs.value }}-${{ matrix.platform }}.tar.gz
+          if-no-files-found: error
+      - name: Upload exact corresponding source archives
+        if: matrix.platform == 'macos-aarch64'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: corresponding-source-archives
+          path: |
+            ${{ runner.temp }}/native-dist/compliance/source/*
+            ${{ runner.temp }}/native-dist/compliance/subtitle-components/source/*
+          if-no-files-found: error
+
+  release:
+    name: Publish internal core and LGPL runtime
+    needs: native
+    runs-on: macos-15
+    steps:
+      - name: Check out the immutable tag
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+      - name: Set up Java
+        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: Validate stable version
+        id: version
+        shell: bash
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Only stable vMAJOR.MINOR.PATCH tags may publish." >&2
+            exit 1
+          fi
+          echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Download all native classpath resources
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: native-resources-*
+          path: ${{ runner.temp }}/native-resources
+          merge-multiple: true
+      - name: Download all replaceable platform bundles
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: native-bundle-*
+          path: ${{ runner.temp }}/native-bundles
+          merge-multiple: true
+      - name: Download exact corresponding source archives
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: corresponding-source-archives
+          path: ${{ runner.temp }}/corresponding-sources
+      - name: Assemble and verify the binary manifest
+        run: >-
+          python3 scripts/assemble_runtime_manifest.py
+          --resources "$RUNNER_TEMP/native-resources"
+          --version "${{ steps.version.outputs.value }}"
+      - name: Run every source, publication, and native gate
+        run: >-
+          ./gradlew --no-daemon check complianceCheck
+          -PpublicationVersion=${{ steps.version.outputs.value }}
+          -PnativePayloadDirectory="$RUNNER_TEMP/native-resources"
+      - name: Publish the internal-use Kotlin core
+        env:
+          ORG_GRADLE_PROJECT_privateMavenRepositoryUrl: ${{ vars.KMEDIA_BRIDGE_PRIVATE_MAVEN_URL }}
+          ORG_GRADLE_PROJECT_privateMavenRepositoryUsername: ${{ vars.KMEDIA_BRIDGE_PRIVATE_MAVEN_USERNAME }}
+          ORG_GRADLE_PROJECT_privateMavenRepositoryPassword: ${{ secrets.KMEDIA_BRIDGE_PRIVATE_MAVEN_PASSWORD }}
+        run: >-
+          ./gradlew --no-daemon
+          :api:publishAllPublicationsToPrivateCoreRepository
+          :ffmpeg:publishAllPublicationsToPrivateCoreRepository
+          -PpublicationVersion=${{ steps.version.outputs.value }}
+      - name: Prepare the version-preserving Pages repository
+        id: pages
+        shell: bash
+        run: |
+          pages_dir="$RUNNER_TEMP/gh-pages"
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git fetch origin gh-pages:refs/remotes/origin/gh-pages
+            git worktree add --detach "$pages_dir" origin/gh-pages
+          else
+            git worktree add --detach "$pages_dir" HEAD
+            git -C "$pages_dir" checkout --orphan gh-pages
+            git -C "$pages_dir" rm -rf .
+          fi
+          cp -R site/. "$pages_dir/"
+          touch "$pages_dir/.nojekyll"
+          echo "directory=$pages_dir" >> "$GITHUB_OUTPUT"
+      - name: Publish Maven repository to the Pages worktree
+        run: >-
+          ./gradlew --no-daemon
+          :ffmpeg-runtime-desktop:publishAllPublicationsToGithubPagesRepository
+          -PpublicationVersion=${{ steps.version.outputs.value }}
+          -PnativePayloadDirectory="$RUNNER_TEMP/native-resources"
+          -PgithubPagesMavenRepository=${{ steps.pages.outputs.directory }}/maven
+      - name: Push the immutable Maven version
+        shell: bash
+        run: |
+          pages_dir="${{ steps.pages.outputs.directory }}"
+          git -C "$pages_dir" config user.name "github-actions[bot]"
+          git -C "$pages_dir" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$pages_dir" add --all
+          if ! git -C "$pages_dir" diff --cached --quiet; then
+            git -C "$pages_dir" commit -m "Publish ${{ github.ref_name }}"
+            git -C "$pages_dir" push origin HEAD:gh-pages
+          fi
+      - name: Assemble release and LGPL evidence
+        id: evidence
+        shell: bash
+        run: |
+          version="${{ steps.version.outputs.value }}"
+          evidence="$RUNNER_TEMP/release-evidence"
+          mkdir -p "$evidence"
+          cp build/reports/compliance/sbom.cdx.json "$evidence/kmedia-bridge-$version-sbom.cdx.json"
+          cp "$RUNNER_TEMP/native-bundles/"* "$evidence/"
+          find "$RUNNER_TEMP/corresponding-sources" -type f \
+            \( -name '*.tar.xz' -o -name '*.tar.gz' \) \
+            -exec cp {} "$evidence/" \;
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$evidence/ffmpeg-8.1.2.tar.xz.asc" \
+            https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz.asc
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$evidence/ffmpeg-devel.asc" \
+            https://ffmpeg.org/ffmpeg-devel.asc
+          test "$(shasum -a 256 "$evidence/ffmpeg-8.1.2.tar.xz" | awk '{print $1}')" = \
+            "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c"
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          evidence = Path(os.environ["RUNNER_TEMP"]) / "release-evidence"
+          manifest = json.loads(Path("compliance/subtitles/manifest.json").read_text())
+          for component in manifest["components"]:
+              archive = evidence / Path(component["sourceUrl"]).name
+              actual = hashlib.sha256(archive.read_bytes()).hexdigest()
+              if actual != component["sourceSha256"]:
+                  raise SystemExit(f"source hash mismatch: {archive.name}")
+          PY
+          tar -czf "$evidence/kmedia-bridge-$version-native-resources.tar.gz" \
+            -C "$RUNNER_TEMP/native-resources" .
+          tar -czf "$evidence/kmedia-bridge-$version-compliance.tar.gz" \
+            LICENSE LICENSES NOTICE THIRD_PARTY_NOTICES.md docs compliance native scripts
+          (
+            cd "$evidence"
+            shasum -a 256 ./* > SHA256SUMS
+          )
+          echo "directory=$evidence" >> "$GITHUB_OUTPUT"
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            "${{ steps.evidence.outputs.directory }}/"* \
+            --verify-tag \
+            --generate-notes \
+            --title "KMediaBridge ${{ steps.version.outputs.value }}"

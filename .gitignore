@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+.gradle/
+.kotlin/
+.idea/
+**/build/
+build/
+local.properties
+*.iml
+*.log
+.DS_Store
+native/prebuilt/
+native/work/
+compliance/generated/
