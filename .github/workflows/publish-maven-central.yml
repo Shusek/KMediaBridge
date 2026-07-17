@@ -1,0 +1,66 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+name: Publish KMediaBridge to Maven Central
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Stable version whose existing tag will be published
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  central:
+    name: Publish signed artifacts
+    runs-on: macos-15
+    steps:
+      - name: Check out the requested immutable tag
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: v${{ inputs.version }}
+          fetch-depth: 0
+      - name: Set up Java
+        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: Validate requested version
+        shell: bash
+        run: |
+          if [[ ! "${{ inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Only stable MAJOR.MINOR.PATCH versions may publish." >&2
+            exit 1
+          fi
+          test "$(git tag --points-at HEAD)" = "v${{ inputs.version }}"
+      - name: Download the already released native resources
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/native-resources"
+          archive="$RUNNER_TEMP/kmedia-bridge-${{ inputs.version }}-native-resources.tar.gz"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --retry 3 --retry-all-errors \
+            --output "$archive" \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/v${{ inputs.version }}/kmedia-bridge-${{ inputs.version }}-native-resources.tar.gz"
+          tar -xzf "$RUNNER_TEMP/kmedia-bridge-${{ inputs.version }}-native-resources.tar.gz" \
+            -C "$RUNNER_TEMP/native-resources"
+      - name: Run release gates
+        run: >-
+          ./gradlew --no-daemon check complianceCheck
+          -PpublicationVersion=${{ inputs.version }}
+          -PnativePayloadDirectory="$RUNNER_TEMP/native-resources"
+      - name: Publish all artifacts and release through Central Portal
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.MAVEN_SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.MAVEN_SIGNING_PASSWORD }}
+        run: >-
+          ./gradlew --no-daemon --no-configuration-cache
+          publishAndReleaseToMavenCentral
+          -PpublicationVersion=${{ inputs.version }}
+          -PnativePayloadDirectory="$RUNNER_TEMP/native-resources"

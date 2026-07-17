@@ -1,0 +1,32 @@
+KMediaBridge Internal Use Notice and Limited License
+
+Copyright (c) 2026 Shusek
+
+This license applies only to files that identify it with:
+
+SPDX-License-Identifier: LicenseRef-KMediaBridge-Internal
+
+KMediaBridge is maintained for the copyright holder's internal projects and
+deployments.
+
+Permission is granted to the copyright holder, its authorized collaborators,
+and applications controlled by the copyright holder to use, copy, modify, and
+distribute this software for those internal projects and deployments. Any
+other use or distribution requires explicit written permission from the
+copyright holder.
+
+This software does not promise source, binary, API, ABI, behavior, Gradle
+metadata, native backend, or artifact compatibility with any previous version.
+Releases may change or remove functionality without notice.
+
+This license does not replace or restrict rights granted for a file or
+component under another license. When this software is combined with a library
+licensed under the GNU Lesser General Public License, permission is granted to
+reverse engineer the combined work solely as needed to debug modifications to
+that LGPL-covered library and to exercise the replacement and relinking rights
+required by that license.
+
+This software is provided "as is", without warranties, maintenance
+obligations, support commitments, or issue-response guarantees.
+
+All rights not expressly granted above are reserved.

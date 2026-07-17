@@ -1,0 +1,8 @@
+KMediaBridge FFmpeg backend
+Copyright (c) 2026 Shusek
+
+The first-party Kotlin backend is covered by the KMediaBridge Internal Use
+Notice and Limited License. It can load a separately distributed, replaceable
+LGPL native runtime. FFmpeg, FriBidi, libass, and the other runtime components
+retain the licenses and replacement rights described by the embedded
+compliance manifests and the runtime artifact's notices.

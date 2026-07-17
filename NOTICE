@@ -1,0 +1,15 @@
+KMediaBridge
+Copyright (c) 2026 Shusek
+
+KMediaBridge 0.4.0 and later use a mixed-license boundary:
+
+- the first-party Kotlin API and backend are covered by the KMediaBridge
+  Internal Use Notice and Limited License;
+- the native bridge, bundled runtime, rebuild/relinking material, and
+  compliance tooling are LGPL-2.1-or-later;
+- bundled third-party components retain the licenses listed in
+  THIRD_PARTY_NOTICES.md.
+
+See LICENSE for the authoritative scope map and LICENSES/ for the complete
+license texts. Versions released through 0.3.0 retain the LGPL license
+conveyed with those versions.

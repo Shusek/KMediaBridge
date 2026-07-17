@@ -1,0 +1,29 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>KMediaBridge Maven repository</title>
+    <style>
+      :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+      body { max-width: 46rem; margin: 4rem auto; padding: 0 1.5rem; line-height: 1.6; }
+      code, pre { font-family: ui-monospace, monospace; }
+      pre { overflow-x: auto; padding: 1rem; background: color-mix(in srgb, CanvasText 8%, Canvas); }
+    </style>
+  </head>
+  <body>
+    <h1>KMediaBridge</h1>
+    <p>Public, version-preserving Maven repository for the independently replaceable LGPL native runtime.</p>
+    <pre><code>repositories {
+    maven("https://shusek.github.io/KMediaBridge/maven")
+}
+
+dependencies {
+    runtimeOnly("io.github.shusek:kmedia-bridge-ffmpeg-runtime-desktop:0.4.1")
+}</code></pre>
+    <p>The internal-use API and Kotlin backend are not published here. Historical
+      versions through 0.3.0 retain the LGPL terms conveyed with those releases.</p>
+    <p><a href="https://github.com/Shusek/KMediaBridge">Source, compliance evidence, and documentation</a></p>
+  </body>
+</html>
