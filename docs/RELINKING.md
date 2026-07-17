@@ -15,6 +15,16 @@ For the macOS SDR subtitle flavor, use the reviewed full profile:
 ./native/build-ffmpeg-unix.sh build/native-work build/native-dist subtitle-sdr
 ```
 
+For Android, use the pinned NDK and select the ABIs to rebuild:
+
+```shell
+./native/build-ffmpeg-android.sh \
+  "$ANDROID_NDK_HOME" \
+  build/native-work-android \
+  build/native-dist-android \
+  arm64-v8a,armeabi-v7a,x86_64
+```
+
 The staged directory contains the exact FFmpeg source archive, bridge source,
 build recipe, generated FFmpeg configuration, compiler identity, license
 texts, notices, runtime inspection, and a SHA-256 inventory. Verify the
@@ -45,6 +55,16 @@ For desktop JVM, place the rebuilt libraries and a matching
 ```kotlin
 BundledFfmpegNativeDriver.load(
     runtimeSelection = FfmpegRuntimeSelection.fromExternalDirectory(Path.of("/replacement")),
+)
+```
+
+For Android, place `android-runtime.properties` at the replacement root, put
+each five-library set in a child directory named for its ABI, and select it
+before the first native call:
+
+```kotlin
+AndroidFfmpegNativeDriver.load(
+    AndroidFfmpegRuntimeSelection.ExternalDirectory(File("/replacement")),
 )
 ```
 

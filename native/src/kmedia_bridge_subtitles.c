@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include "kmedia_bridge.h"
+#include "kmedia_bridge_timestamps.h"
 
 #include <libavutil/avstring.h>
 #include <libavutil/mem.h>
@@ -48,6 +49,7 @@ typedef struct KmbSubtitlePipeline {
     int selected_subtitle_track_id;
     int output_video_track_id;
     int output_audio_track_id;
+    KmbTimestampState audio_timestamp_state;
     KmbSubtitleWriteState write_state;
 } KmbSubtitlePipeline;
 
@@ -542,7 +544,7 @@ static KmbResult kmb_subtitle_open_output(
     av_dict_set(
         &pipeline->muxer_options,
         "movflags",
-        "frag_keyframe+empty_moov+default_base_moof+negative_cts_offsets",
+        "frag_keyframe+delay_moov+default_base_moof+negative_cts_offsets",
         0
     );
     av_dict_set_int(&pipeline->muxer_options, "frag_duration", fragment_duration_us, 0);
@@ -665,6 +667,7 @@ static KmbResult kmb_subtitle_copy_audio_packet(
     AVStream *input_stream = pipeline->input->streams[pipeline->selected_audio_track_id];
     AVStream *output_stream = pipeline->output->streams[pipeline->output_audio_track_id];
     int result = 0;
+    kmb_prepare_packet_timestamps(input_stream, packet, &pipeline->audio_timestamp_state);
     av_packet_rescale_ts(packet, input_stream->time_base, output_stream->time_base);
     packet->stream_index = pipeline->output_audio_track_id;
     packet->pos = -1;

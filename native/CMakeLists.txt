@@ -2,12 +2,33 @@
 cmake_minimum_required(VERSION 3.24)
 project(kmediabridge LANGUAGES C)
 
+include(CTest)
+
+option(KMB_ENABLE_HDR_TO_SDR "Build the optional controlled HDR-to-SDR transcoder" OFF)
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat libavcodec libavutil)
+if(KMB_ENABLE_HDR_TO_SDR)
+    pkg_check_modules(FFMPEG_HDR REQUIRED IMPORTED_TARGET libswscale)
+endif()
 
-add_library(kmediabridge SHARED src/kmedia_bridge.c src/kmedia_bridge_subtitles.c)
+add_library(
+    kmediabridge
+    SHARED
+    src/kmedia_bridge.c
+    src/kmedia_bridge_subtitles.c
+    src/kmedia_bridge_hdr_math.c
+    src/kmedia_bridge_tonemap.c
+)
 target_include_directories(kmediabridge PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(kmediabridge PRIVATE PkgConfig::FFMPEG)
+if(KMB_ENABLE_HDR_TO_SDR)
+    target_compile_definitions(kmediabridge PRIVATE KMB_ENABLE_HDR_TO_SDR=1)
+    target_link_libraries(kmediabridge PRIVATE PkgConfig::FFMPEG_HDR)
+endif()
+if(UNIX)
+    target_link_libraries(kmediabridge PRIVATE m)
+endif()
 target_compile_features(kmediabridge PRIVATE c_std_11)
 
 if(MSVC)
@@ -33,3 +54,37 @@ endif()
 
 install(TARGETS kmediabridge LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
 install(FILES include/kmedia_bridge.h DESTINATION include)
+
+if(BUILD_TESTING)
+    add_executable(kmedia_bridge_timestamps_test tests/kmedia_bridge_timestamps_test.c)
+    target_include_directories(
+        kmedia_bridge_timestamps_test
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    )
+    target_link_libraries(kmedia_bridge_timestamps_test PRIVATE PkgConfig::FFMPEG)
+    target_compile_features(kmedia_bridge_timestamps_test PRIVATE c_std_11)
+    if(MSVC)
+        target_compile_options(kmedia_bridge_timestamps_test PRIVATE /W4 /WX)
+    else()
+        target_compile_options(kmedia_bridge_timestamps_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME kmedia_bridge_timestamps COMMAND kmedia_bridge_timestamps_test)
+
+    add_executable(
+        kmedia_bridge_hdr_math_test
+        tests/kmedia_bridge_hdr_math_test.c
+        src/kmedia_bridge_hdr_math.c
+    )
+    target_include_directories(
+        kmedia_bridge_hdr_math_test
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    )
+    target_compile_features(kmedia_bridge_hdr_math_test PRIVATE c_std_11)
+    if(MSVC)
+        target_compile_options(kmedia_bridge_hdr_math_test PRIVATE /W4 /WX)
+    else()
+        target_compile_options(kmedia_bridge_hdr_math_test PRIVATE -Wall -Wextra -Werror)
+        target_link_libraries(kmedia_bridge_hdr_math_test PRIVATE m)
+    endif()
+    add_test(NAME kmedia_bridge_hdr_math COMMAND kmedia_bridge_hdr_math_test)
+endif()

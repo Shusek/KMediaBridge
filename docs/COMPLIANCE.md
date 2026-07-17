@@ -16,12 +16,12 @@ certification.
 
 - `api/**` and the first-party Kotlin implementation in `ffmpeg/**` use
   `LicenseRef-KMediaBridge-Internal`.
-- `native/**`, the runtime artifact, rebuild/relinking material, and compliance
-  tooling remain LGPL-2.1-or-later.
+- `native/**`, both runtime artifacts, rebuild/relinking material, and
+  compliance tooling remain LGPL-2.1-or-later.
 - Source files carry the SPDX identifier assigned by the root `LICENSE` map.
-- Core POMs identify the internal-use license; the runtime POM identifies
-  LGPL-2.1-or-later. All three coordinates may be publicly distributed by
-  Maven Central without changing those terms.
+- Core POMs identify the internal-use license; both runtime POMs identify
+  LGPL-2.1-or-later. All four coordinates may be publicly distributed by Maven
+  Central without changing those terms.
 - Publication verification stages the two license scopes separately and fails
   if a 0.4.0-or-later core artifact enters the runtime-only Pages repository
   or if native payloads enter a core archive.
@@ -39,6 +39,9 @@ The following requirements apply to payloads published by KMediaBridge:
   davs2/xavs, smbclient, or another component that changes the effective
   license without a fresh legal review.
 - Link FFmpeg dynamically to the native driver.
+- For Android, inspect every ELF payload with the pinned NDK toolchain and
+  require the bridge's dynamic dependencies to remain the separately
+  replaceable `-kmb` FFmpeg shared objects.
 - Record the complete configure line and every linked component.
 - Query the built libraries for their reported license and configuration;
   never trust a filename or a manually entered label alone.
@@ -62,10 +65,12 @@ Every native payload release must contain or link immutably to:
 8. A source offer hosted beside the downloadable binary.
 9. Replacement/relinking instructions appropriate to the platform.
 
-Stable desktop releases publish a single optional Maven runtime JAR plus
-separate replaceable platform archives. The JAR's aggregate manifest must list
-macOS arm64/x64, Linux x64, and Windows x64 and must match every native entry's
-SHA-256. Release publication fails if a static library or executable is found.
+Stable releases publish an optional desktop runtime JAR and an optional Android
+runtime AAR plus separate replaceable platform archives. The desktop JAR's
+aggregate manifest must list macOS arm64/x64, Linux x64, and Windows x64. The
+Android AAR must list every published ABI and five shared objects per ABI.
+Every manifest hash must match its archive, and publication fails if a static
+library or executable is found.
 
 The official FFmpeg legal checklist remains the upstream baseline:
 https://ffmpeg.org/legal.html

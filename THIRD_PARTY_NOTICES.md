@@ -3,7 +3,8 @@
 ## FFmpeg
 
 KMediaBridge contains source code for an optional native bridge to FFmpeg.
-The first `0.1.x` source distribution does not include an FFmpeg binary.
+Stable runtime artifacts may contain the corresponding dynamically linked
+desktop or Android FFmpeg libraries; the Kotlin core artifacts do not.
 
 FFmpeg is licensed under LGPL-2.1-or-later by default. Optional FFmpeg build
 features can change the resulting binary to GPL or make it non-redistributable.

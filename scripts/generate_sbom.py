@@ -41,11 +41,24 @@ def component(name: str, version: str, license_id: str, scope: str = "required")
     }
 
 
+def read_properties(path: Path) -> dict[str, str]:
+    properties: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line or line.startswith("#"):
+            continue
+        key, separator, value = line.partition("=")
+        if not separator:
+            raise ValueError(f"Malformed property in {path}: {line!r}")
+        properties[key] = value
+    return properties
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--version", required=True)
     parser.add_argument("--runtime-resources", type=Path)
+    parser.add_argument("--android-runtime", type=Path)
     arguments = parser.parse_args()
 
     root = Path(__file__).resolve().parent.parent
@@ -88,12 +101,62 @@ def main() -> int:
         or "projectLicense" in runtime_manifest
     ):
         raise ValueError("Binary runtime evidence must declare the LGPL runtime boundary")
-    distribution_status = "binary" if runtime_manifest is not None else "source-only"
+    android_manifest_path = (
+        arguments.android_runtime / "compliance/manifest.properties"
+        if arguments.android_runtime is not None
+        else None
+    )
+    if android_manifest_path is not None and not android_manifest_path.is_file():
+        raise ValueError("The Android runtime compliance manifest is missing")
+    android_manifest = (
+        read_properties(android_manifest_path)
+        if android_manifest_path is not None
+        else None
+    )
+    if android_manifest is not None and (
+        android_manifest.get("schemaVersion") != "1"
+        or android_manifest.get("ffmpegVersion") != ffmpeg["version"]
+        or android_manifest.get("ffmpegSourceSha256") != ffmpeg["sourceSha256"]
+        or android_manifest.get("ffmpegLicenseSpdx") != LGPL_LICENSE
+        or android_manifest.get("dynamicLinkingVerified") != "true"
+    ):
+        raise ValueError("Android runtime evidence differs from the reviewed FFmpeg boundary")
+    android_binaries = (
+        sorted((arguments.android_runtime / "jniLibs").glob("*/*.so"))
+        if arguments.android_runtime is not None
+        else []
+    )
+    if android_manifest is not None and not android_binaries:
+        raise ValueError("Android runtime evidence contains no shared-object payload")
+    declared_android_abis = (
+        set(android_manifest.get("android.abis", "").split(","))
+        if android_manifest is not None
+        else set()
+    )
+    actual_android_abis = {path.parent.name for path in android_binaries}
+    if android_manifest is not None and declared_android_abis != actual_android_abis:
+        raise ValueError("Android runtime ABI evidence differs from its native payload")
+
+    distribution_status = (
+        "binary"
+        if runtime_manifest is not None or android_manifest is not None
+        else "source-only"
+    )
     ffmpeg_source_url = (
         runtime_manifest["ffmpeg"]["sourceOfferUrl"]
         if runtime_manifest is not None
-        else ffmpeg["sourceUrl"]
+        else (
+            android_manifest["ffmpegSourceUrl"]
+            if android_manifest is not None
+            else ffmpeg["sourceUrl"]
+        )
     )
+    desktop_native_payload_count = (
+        len(runtime_manifest.get("nativePayloads", []))
+        if runtime_manifest
+        else 0
+    )
+    android_native_payload_count = len(android_binaries)
 
     bom = {
         "bomFormat": "CycloneDX",
@@ -132,6 +195,12 @@ def main() -> int:
                 "kmedia-bridge-ffmpeg-runtime-desktop",
                 project_version,
                 LGPL_LICENSE,
+                "optional",
+            ),
+            component(
+                "kmedia-bridge-ffmpeg-runtime-android",
+                project_version,
+                "LGPL-2.1-or-later",
                 "optional",
             ),
             {
@@ -186,7 +255,18 @@ def main() -> int:
                     {"name": "kmediabridge:distributionStatus", "value": distribution_status},
                     {
                         "name": "kmediabridge:nativePayloadCount",
-                        "value": str(len(runtime_manifest.get("nativePayloads", []))) if runtime_manifest else "0",
+                        "value": str(
+                            desktop_native_payload_count +
+                            android_native_payload_count
+                        ),
+                    },
+                    {
+                        "name": "kmediabridge:desktopNativePayloadCount",
+                        "value": str(desktop_native_payload_count),
+                    },
+                    {
+                        "name": "kmediabridge:androidNativePayloadCount",
+                        "value": str(android_native_payload_count),
                     },
                 ],
             },
@@ -208,6 +288,24 @@ def main() -> int:
             },
         ],
     }
+
+    for library in android_binaries:
+        abi = library.parent.name
+        bom["components"].append(
+            {
+                "type": "library",
+                "bom-ref": f"urn:kmediabridge:android:{abi}:{library.name}",
+                "name": library.name,
+                "version": project_version,
+                "scope": "optional",
+                "hashes": [{"alg": "SHA-256", "content": hashlib.sha256(library.read_bytes()).hexdigest()}],
+                "licenses": [{"license": {"id": LGPL_LICENSE}}],
+                "properties": [
+                    {"name": "kmediabridge:platform", "value": "android"},
+                    {"name": "kmediabridge:abi", "value": abi},
+                ],
+            }
+        )
 
     for native_component in subtitle_manifest["components"]:
         bom["components"].append(

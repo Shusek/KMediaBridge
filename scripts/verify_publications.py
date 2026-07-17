@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import re
 import sys
@@ -27,7 +28,26 @@ LGPL_LICENSE_NAME = "GNU Lesser General Public License v2.1 or later"
 LGPL_LICENSE_URL = "https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html"
 API_ARTIFACT = "kmedia-bridge-api"
 FFMPEG_ARTIFACT = "kmedia-bridge-ffmpeg"
-RUNTIME_ARTIFACT = "kmedia-bridge-ffmpeg-runtime-desktop"
+DESKTOP_RUNTIME_ARTIFACT = "kmedia-bridge-ffmpeg-runtime-desktop"
+ANDROID_RUNTIME_ARTIFACT = "kmedia-bridge-ffmpeg-runtime-android"
+RUNTIME_ARTIFACTS = {DESKTOP_RUNTIME_ARTIFACT, ANDROID_RUNTIME_ARTIFACT}
+ANDROID_RUNTIME_MANIFEST = "META-INF/kmediabridge/android-runtime.properties"
+ANDROID_RUNTIME_LICENSE = "META-INF/kmediabridge/LICENSE"
+ANDROID_RUNTIME_NOTICE = "META-INF/kmediabridge/NOTICE"
+ANDROID_RUNTIME_RELINKING = "META-INF/kmediabridge/RELINKING.md"
+ANDROID_RUNTIME_DOCUMENTS = {
+    ANDROID_RUNTIME_MANIFEST,
+    ANDROID_RUNTIME_LICENSE,
+    ANDROID_RUNTIME_NOTICE,
+    ANDROID_RUNTIME_RELINKING,
+}
+ANDROID_RUNTIME_LIBRARIES = {
+    "libavutil-kmb.so",
+    "libavcodec-kmb.so",
+    "libavformat-kmb.so",
+    "libswscale-kmb.so",
+    "libkmediabridge.so",
+}
 REQUIRED_RUNTIME_PLATFORMS = {
     "linux-x86_64",
     "macos-aarch64",
@@ -148,7 +168,7 @@ def collect_poms(repository: Path, version: str) -> list[Pom]:
 
 
 def artifact_family(artifact_id: str) -> str | None:
-    if artifact_id == RUNTIME_ARTIFACT:
+    if artifact_id in RUNTIME_ARTIFACTS:
         return "runtime"
     if artifact_id == API_ARTIFACT or artifact_id.startswith(f"{API_ARTIFACT}-"):
         return "api"
@@ -263,9 +283,19 @@ def verify_internal_core_repository(
     return poms, archive_count
 
 
-def verify_runtime_license_archive(repository: Path, version: str) -> Path:
-    directory = repository / "io/github/shusek" / RUNTIME_ARTIFACT / version
-    archive = directory / f"{RUNTIME_ARTIFACT}-{version}.jar"
+def verify_lgpl_license_text(document: bytes, label: str) -> None:
+    license_text = document.decode("utf-8")
+    if (
+        "GNU LESSER GENERAL PUBLIC LICENSE" not in license_text
+        or "Version 2.1" not in license_text
+        or "Internal Use Notice and Limited License" in license_text
+    ):
+        raise ValueError(f"{label} does not contain the complete LGPL v2.1 text")
+
+
+def verify_desktop_runtime_license_archive(repository: Path, version: str) -> Path:
+    directory = repository / "io/github/shusek" / DESKTOP_RUNTIME_ARTIFACT / version
+    archive = directory / f"{DESKTOP_RUNTIME_ARTIFACT}-{version}.jar"
     if not zipfile.is_zipfile(archive):
         raise ValueError(f"public runtime main JAR is missing or invalid: {archive}")
     with zipfile.ZipFile(archive) as zipped:
@@ -281,38 +311,87 @@ def verify_runtime_license_archive(repository: Path, version: str) -> Path:
             raise ValueError(
                 f"{archive.name} is missing runtime compliance documents: {missing}"
             )
-        license_text = zipped.read("META-INF/LICENSE").decode("utf-8")
-        if (
-            "GNU LESSER GENERAL PUBLIC LICENSE" not in license_text
-            or "Version 2.1" not in license_text
-            or "Internal Use Notice and Limited License" in license_text
-        ):
-            raise ValueError(f"{archive.name} does not embed the complete LGPL v2.1 text")
+        verify_lgpl_license_text(
+            zipped.read("META-INF/LICENSE"),
+            archive.name,
+        )
     return archive
+
+
+def read_android_compliance_resources(zipped: zipfile.ZipFile) -> dict[str, bytes]:
+    """Read Android runtime evidence from an AAR or its standard classes.jar."""
+    outer_names = set(zipped.namelist())
+    resources = {
+        name: zipped.read(name)
+        for name in ANDROID_RUNTIME_DOCUMENTS
+        if name in outer_names
+    }
+    if ANDROID_RUNTIME_DOCUMENTS <= resources.keys() or "classes.jar" not in outer_names:
+        return resources
+
+    with zipfile.ZipFile(io.BytesIO(zipped.read("classes.jar"))) as classes:
+        class_names = set(classes.namelist())
+        for name in ANDROID_RUNTIME_DOCUMENTS - resources.keys():
+            if name in class_names:
+                resources[name] = classes.read(name)
+    return resources
+
+
+def verify_android_runtime_archive(
+    archive: Path,
+    zipped: zipfile.ZipFile,
+    native_names: list[str],
+) -> None:
+    resources = read_android_compliance_resources(zipped)
+    missing_documents = ANDROID_RUNTIME_DOCUMENTS - resources.keys()
+    if missing_documents:
+        raise ValueError(
+            f"{archive.name} is missing Android compliance documents: "
+            f"{sorted(missing_documents)}"
+        )
+    verify_lgpl_license_text(resources[ANDROID_RUNTIME_LICENSE], archive.name)
+    properties = read_properties(
+        resources[ANDROID_RUNTIME_MANIFEST].decode("utf-8"),
+        ANDROID_RUNTIME_MANIFEST,
+    )
+    available = properties.get("available")
+    if available not in {"true", "false"}:
+        raise ValueError(f"{archive.name} has an invalid Android availability marker")
+    if (available == "true") != bool(native_names):
+        raise ValueError(
+            f"{archive.name} Android manifest availability contradicts its native payload"
+        )
+    if native_names:
+        verify_android_native_archive(archive, zipped, native_names, resources)
 
 
 def verify_runtime_repository(repository: Path, version: str) -> tuple[list[Pom], int]:
     poms = collect_poms(repository, version)
-    if {pom.artifact_id for pom in poms} != {RUNTIME_ARTIFACT}:
+    if {pom.artifact_id for pom in poms} != RUNTIME_ARTIFACTS:
         raise ValueError(
-            "runtime staging must contain exactly the LGPL runtime and no core; "
+            "runtime staging must contain exactly the desktop and Android LGPL "
+            "runtimes and no core artifacts; "
             f"found {[pom.artifact_id for pom in poms]}"
-    )
-    verify_lgpl_pom(poms[0])
-    verify_central_supporting_archives(poms[0], version)
-    verify_runtime_license_archive(repository, version)
+        )
+
+    for pom in poms:
+        verify_lgpl_pom(pom)
+        verify_central_supporting_archives(pom, version)
+    verify_desktop_runtime_license_archive(repository, version)
 
     native_archives = 0
-    for archive in repository.rglob("*"):
-        if archive.parent.name != version:
-            continue
-        if archive.suffix not in {".aar", ".jar", ".klib"} or not zipfile.is_zipfile(archive):
-            continue
-        with zipfile.ZipFile(archive) as zipped:
-            native_names = [name for name in zipped.namelist() if is_native(name)]
-            if native_names:
-                native_archives += 1
-                verify_native_archive(archive, zipped, native_names)
+    for pom in poms:
+        for archive in archives_for_pom(pom, version):
+            if not zipfile.is_zipfile(archive):
+                continue
+            with zipfile.ZipFile(archive) as zipped:
+                native_names = [name for name in zipped.namelist() if is_native(name)]
+                if pom.artifact_id == ANDROID_RUNTIME_ARTIFACT:
+                    verify_android_runtime_archive(archive, zipped, native_names)
+                elif native_names:
+                    verify_native_archive(archive, zipped, native_names)
+                if native_names:
+                    native_archives += 1
     return poms, native_archives
 
 
@@ -387,6 +466,56 @@ def verify_native_archive(archive: Path, zipped: zipfile.ZipFile, native_names: 
         require_public_https(str(payload.get("sourceOfferUrl", "")), f"Source offer for {name}")
         if not payload.get("correspondingSourcePath"):
             raise ValueError(f"{archive.name} has no corresponding source path for {name}")
+
+
+def verify_android_native_archive(
+    archive: Path,
+    zipped: zipfile.ZipFile,
+    native_names: list[str],
+    resources: dict[str, bytes],
+) -> None:
+    missing_documents = ANDROID_RUNTIME_DOCUMENTS - resources.keys()
+    if missing_documents:
+        raise ValueError(f"{archive.name} is missing Android compliance documents: {sorted(missing_documents)}")
+    properties = read_properties(
+        resources[ANDROID_RUNTIME_MANIFEST].decode("utf-8"),
+        ANDROID_RUNTIME_MANIFEST,
+    )
+    if properties.get("schemaVersion") != "1" or properties.get("available") != "true":
+        raise ValueError(f"{archive.name} has no available Android runtime manifest schema 1")
+    if properties.get("abiVersion") != "4" or properties.get("ffmpegVersion") != "8.1.2":
+        raise ValueError(f"{archive.name} has an unsupported Android native ABI or FFmpeg version")
+    if properties.get("ffmpegLicenseSpdx") != "LGPL-2.1-or-later":
+        raise ValueError(f"{archive.name} does not declare the Android FFmpeg LGPL license")
+    if properties.get("dynamicLinkingVerified") != "true":
+        raise ValueError(f"{archive.name} does not declare a replaceable Android FFmpeg boundary")
+    if properties.get("exactCorrespondingSourceAvailable") != "true":
+        raise ValueError(f"{archive.name} has no exact corresponding Android source offer")
+    if properties.get("feature.hdrToSdrToneMap") != "true" or properties.get("feature.subtitleBurnIn") != "false":
+        raise ValueError(f"{archive.name} has an unexpected Android runtime feature set")
+    require_public_https(properties.get("ffmpegSourceArchiveUrl", ""), "Android FFmpeg source archive")
+    require_public_https(properties.get("buildRecipeUrl", ""), "Android build recipe")
+    if not SHA256.fullmatch(properties.get("ffmpegSourceArchiveSha256", "")):
+        raise ValueError(f"{archive.name} has an invalid Android FFmpeg source hash")
+
+    abi_count = int(properties.get("abi.count", "-1"))
+    if abi_count < 1:
+        raise ValueError(f"{archive.name} has no Android ABI payload")
+    declared: dict[str, str] = {}
+    for index in range(abi_count):
+        abi = properties.get(f"abi.{index}.name", "")
+        if not abi or "/" in abi or ".." in abi:
+            raise ValueError(f"{archive.name} has an invalid Android ABI name")
+        for library in ANDROID_RUNTIME_LIBRARIES:
+            digest = properties.get(f"abi.{index}.{library}.sha256", "")
+            if not SHA256.fullmatch(digest):
+                raise ValueError(f"{archive.name} has no valid hash for {abi}/{library}")
+            declared[f"jni/{abi}/{library}"] = digest
+    if set(native_names) != set(declared):
+        raise ValueError(f"{archive.name} Android native payload inventory differs from its manifest")
+    for name, expected_digest in declared.items():
+        if hashlib.sha256(zipped.read(name)).hexdigest() != expected_digest:
+            raise ValueError(f"{archive.name} has an Android payload SHA-256 mismatch for {name}")
 
 
 def main() -> int:

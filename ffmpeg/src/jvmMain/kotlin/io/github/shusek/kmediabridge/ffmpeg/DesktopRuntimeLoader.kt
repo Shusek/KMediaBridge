@@ -70,6 +70,17 @@ internal interface KmbNativeApi : Library {
         outputError: PointerByReference,
     ): Int
 
+    fun kmb_tone_map_hdr_to_sdr_fragmented_mp4_stream(
+        inputLocator: String,
+        fragmentDurationUs: Long,
+        startTimeUs: Long,
+        preferredVideoTrackId: Int,
+        preferredAudioTrackId: Int,
+        writeCallback: KmbWriteCallback,
+        opaque: Pointer?,
+        outputError: PointerByReference,
+    ): Int
+
     fun kmb_free_string(value: Pointer?)
 }
 
@@ -173,6 +184,46 @@ internal class LoadedFfmpegRuntime(
             throw MediaBridgeException(
                 MediaBridgeErrorCode.CONVERSION_FAILED,
                 errorText.ifBlank { "The native subtitle pipeline failed without exposing the input locator." },
+            )
+        }
+    }
+
+    fun toneMapHdrToSdrFragmentedMp4(
+        inputLocator: String,
+        fragmentDurationUs: Long,
+        startTimeUs: Long,
+        preferredVideoTrackId: Int,
+        preferredAudioTrackId: Int,
+        consumer: (ByteArray) -> Boolean,
+    ) {
+        val outputError = PointerByReference()
+        val callbackFailure = AtomicReference<Throwable?>(null)
+        val callback =
+            KmbWriteCallback { _, pointer, size ->
+                try {
+                    if (pointer == null || size <= 0 || !consumer(pointer.getByteArray(0L, size))) 1 else 0
+                } catch (failure: Throwable) {
+                    callbackFailure.compareAndSet(null, failure)
+                    1
+                }
+            }
+        val result =
+            api.kmb_tone_map_hdr_to_sdr_fragmented_mp4_stream(
+                inputLocator,
+                fragmentDurationUs,
+                startTimeUs,
+                preferredVideoTrackId,
+                preferredAudioTrackId,
+                callback,
+                null,
+                outputError,
+            )
+        val errorText = takeOwnedString(outputError.value)
+        callbackFailure.get()?.let { throw it }
+        if (result != KMB_OK && result != KMB_CANCELLED) {
+            throw MediaBridgeException(
+                MediaBridgeErrorCode.CONVERSION_FAILED,
+                errorText.ifBlank { "The native HDR-to-SDR pipeline failed without exposing the input locator." },
             )
         }
     }
@@ -297,11 +348,8 @@ internal object DesktopRuntimeLoader {
             reject("The loaded FFmpeg license does not match the signed runtime manifest.")
         }
         val expectedFeatures =
-            if (manifest.capabilities.canBurnSubtitles) {
-                "{\"subtitleBurnIn\":true}"
-            } else {
-                "{\"subtitleBurnIn\":false}"
-            }
+            "{\"subtitleBurnIn\":${manifest.capabilities.canBurnSubtitles}," +
+                "\"hdrToSdrToneMap\":${manifest.capabilities.canToneMapToSdr}}"
         if (actualFeatures != expectedFeatures) {
             reject("The loaded native feature set does not match the signed runtime manifest.")
         }
@@ -676,7 +724,9 @@ private data class NativePayloadManifest(
                     canBurnSubtitles = requiredBoolean("capability.canBurnSubtitles"),
                 )
             val subtitleFlavor = runtimeFlavor == FfmpegRuntimeFlavor.SUBTITLE_BURN_IN_SDR
-            if (capabilities.canBurnSubtitles != subtitleFlavor || capabilities.canTranscodeVideo != subtitleFlavor) {
+            if (capabilities.canBurnSubtitles != subtitleFlavor ||
+                capabilities.canTranscodeVideo != (subtitleFlavor || capabilities.canToneMapToSdr)
+            ) {
                 DesktopRuntimeLoader.run { reject("The native manifest has an inconsistent runtime flavor.") }
             }
             val expectedSubtitleComponents =

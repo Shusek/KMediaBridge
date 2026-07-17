@@ -14,13 +14,14 @@
   </head>
   <body>
     <h1>KMediaBridge</h1>
-    <p>Public, version-preserving Maven repository for the independently replaceable LGPL native runtime.</p>
+    <p>Public, version-preserving Maven repository for the independently replaceable LGPL native runtimes.</p>
     <pre><code>repositories {
     maven("https://shusek.github.io/KMediaBridge/maven")
 }
 
 dependencies {
-    runtimeOnly("io.github.shusek:kmedia-bridge-ffmpeg-runtime-desktop:0.4.1")
+    runtimeOnly("io.github.shusek:kmedia-bridge-ffmpeg-runtime-desktop:0.4.2")
+    runtimeOnly("io.github.shusek:kmedia-bridge-ffmpeg-runtime-android:0.4.2")
 }</code></pre>
     <p>The internal-use API and Kotlin backend are not published here. Historical
       versions through 0.3.0 retain the LGPL terms conveyed with those releases.</p>

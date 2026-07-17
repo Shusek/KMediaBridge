@@ -14,6 +14,10 @@ concurrency:
   group: release
   cancel-in-progress: false
 
+env:
+  ANDROID_NDK_VERSION: 29.0.14206865
+  ANDROID_RUNTIME_ABIS: arm64-v8a,armeabi-v7a,x86_64
+
 jobs:
   native:
     name: Build native payload (${{ matrix.platform }})
@@ -141,9 +145,86 @@ jobs:
             ${{ runner.temp }}/native-dist/compliance/subtitle-components/source/*
           if-no-files-found: error
 
+  android-native:
+    name: Build Android LGPL runtime
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the immutable tag
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+      - name: Set up Java
+        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Android SDK command-line tools
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        with:
+          packages: ""
+      - name: Validate stable version
+        id: version
+        shell: bash
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Only stable vMAJOR.MINOR.PATCH tags may publish." >&2
+            exit 1
+          fi
+          echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Install the pinned Android NDK
+        shell: bash
+        run: sdkmanager "ndk;$ANDROID_NDK_VERSION"
+      - name: Verify the signed FFmpeg source release
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/android-work"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$RUNNER_TEMP/android-work/ffmpeg-8.1.2.tar.xz" \
+            https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$RUNNER_TEMP/ffmpeg-8.1.2.tar.xz.asc" \
+            https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz.asc
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$RUNNER_TEMP/ffmpeg-devel.asc" \
+            https://ffmpeg.org/ffmpeg-devel.asc
+          ./scripts/verify_ffmpeg_release.sh \
+            "$RUNNER_TEMP/android-work/ffmpeg-8.1.2.tar.xz" \
+            "$RUNNER_TEMP/ffmpeg-8.1.2.tar.xz.asc" \
+            "$RUNNER_TEMP/ffmpeg-devel.asc"
+      - name: Build and inspect every Android ABI
+        shell: bash
+        run: >-
+          ./native/build-ffmpeg-android.sh
+          "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
+          "$RUNNER_TEMP/android-work"
+          "$RUNNER_TEMP/android-dist"
+          "$ANDROID_RUNTIME_ABIS"
+          "$RUNNER_TEMP/android-work/ffmpeg-8.1.2.tar.xz"
+      - name: Assemble a replaceable Android bundle
+        shell: bash
+        run: >-
+          tar -czf
+          "$RUNNER_TEMP/kmedia-bridge-${{ steps.version.outputs.value }}-android.tar.gz"
+          -C "$RUNNER_TEMP/android-dist"
+          jniLibs compliance
+      - name: Upload the Android native payload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: android-native-payload
+          path: ${{ runner.temp }}/android-dist
+          if-no-files-found: error
+      - name: Upload the replaceable Android bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: native-bundle-android
+          path: ${{ runner.temp }}/kmedia-bridge-${{ steps.version.outputs.value }}-android.tar.gz
+          if-no-files-found: error
+
   release:
     name: Publish LGPL runtime and release evidence
-    needs: native
+    needs:
+      - native
+      - android-native
     runs-on: macos-15
     steps:
       - name: Check out the immutable tag
@@ -156,6 +237,12 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: gradle
+      - name: Set up Android SDK command-line tools
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        with:
+          packages: ""
+      - name: Install the Android platform used by the runtime AAR
+        run: sdkmanager "platforms;android-36"
       - name: Validate stable version
         id: version
         shell: bash
@@ -177,6 +264,11 @@ jobs:
           pattern: native-bundle-*
           path: ${{ runner.temp }}/native-bundles
           merge-multiple: true
+      - name: Download the Android native payload
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: android-native-payload
+          path: ${{ runner.temp }}/android-dist
       - name: Download exact corresponding source archives
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
@@ -191,7 +283,10 @@ jobs:
         run: >-
           ./gradlew --no-daemon check complianceCheck
           -PpublicationVersion=${{ steps.version.outputs.value }}
-          -PnativePayloadDirectory="$RUNNER_TEMP/native-resources"
+          -PdesktopNativePayloadDirectory="$RUNNER_TEMP/native-resources"
+          -PandroidNativePayloadDirectory="$RUNNER_TEMP/android-dist"
+          -PandroidRuntimeAbis="$ANDROID_RUNTIME_ABIS"
+          -PbuildRecipeRevision="${{ github.sha }}"
       - name: Prepare the version-preserving Pages repository
         id: pages
         shell: bash
@@ -212,8 +307,12 @@ jobs:
         run: >-
           ./gradlew --no-daemon
           :ffmpeg-runtime-desktop:publishAllPublicationsToGithubPagesRepository
+          :ffmpeg-runtime-android:publishAllPublicationsToGithubPagesRepository
           -PpublicationVersion=${{ steps.version.outputs.value }}
-          -PnativePayloadDirectory="$RUNNER_TEMP/native-resources"
+          -PdesktopNativePayloadDirectory="$RUNNER_TEMP/native-resources"
+          -PandroidNativePayloadDirectory="$RUNNER_TEMP/android-dist"
+          -PandroidRuntimeAbis="$ANDROID_RUNTIME_ABIS"
+          -PbuildRecipeRevision="${{ github.sha }}"
           -PgithubPagesMavenRepository=${{ steps.pages.outputs.directory }}/maven
       - name: Push the immutable Maven version
         shell: bash
@@ -262,6 +361,8 @@ jobs:
           PY
           tar -czf "$evidence/kmedia-bridge-$version-native-resources.tar.gz" \
             -C "$RUNNER_TEMP/native-resources" .
+          tar -czf "$evidence/kmedia-bridge-$version-android-native-payload.tar.gz" \
+            -C "$RUNNER_TEMP/android-dist" .
           tar -czf "$evidence/kmedia-bridge-$version-compliance.tar.gz" \
             LICENSE LICENSES NOTICE THIRD_PARTY_NOTICES.md docs compliance native scripts
           (

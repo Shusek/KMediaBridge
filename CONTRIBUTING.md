@@ -13,7 +13,7 @@ features are not accepted in official artifacts.
 
 Do not move first-party Kotlin core code into the LGPL runtime publication or
 publish 0.4.0-or-later core artifacts to the runtime-only Pages repository.
-Maven Central may contain all three coordinates only when each POM and archive
+Maven Central may contain all four coordinates only when each POM and archive
 preserves its assigned internal-use or LGPL license.
 
 Never commit media URLs, credentials, signing material, private test media, or

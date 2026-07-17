@@ -36,3 +36,4 @@ dependencyResolutionManagement {
 include(":api")
 include(":ffmpeg")
 include(":ffmpeg-runtime-desktop")
+include(":ffmpeg-runtime-android")

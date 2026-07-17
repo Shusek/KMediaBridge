@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include "kmedia_bridge.h"
+#include "kmedia_bridge_timestamps.h"
 
 #include <libavcodec/avcodec.h>
 #include <libavcodec/codec_desc.h>
@@ -305,10 +306,14 @@ const char *kmb_ffmpeg_configuration(void) {
 }
 
 const char *kmb_runtime_features_json(void) {
-#if defined(KMB_ENABLE_SUBTITLE_BURN_IN)
-    return "{\"subtitleBurnIn\":true}";
+#if defined(KMB_ENABLE_SUBTITLE_BURN_IN) && defined(KMB_ENABLE_HDR_TO_SDR)
+    return "{\"subtitleBurnIn\":true,\"hdrToSdrToneMap\":true}";
+#elif defined(KMB_ENABLE_SUBTITLE_BURN_IN)
+    return "{\"subtitleBurnIn\":true,\"hdrToSdrToneMap\":false}";
+#elif defined(KMB_ENABLE_HDR_TO_SDR)
+    return "{\"subtitleBurnIn\":false,\"hdrToSdrToneMap\":true}";
 #else
-    return "{\"subtitleBurnIn\":false}";
+    return "{\"subtitleBurnIn\":false,\"hdrToSdrToneMap\":false}";
 #endif
 }
 
@@ -442,6 +447,7 @@ static KmbResult kmb_remux_fragmented_mp4_internal(
     unsigned char *custom_buffer = NULL;
     AVDictionary *muxer_options = NULL;
     int *stream_mapping = NULL;
+    KmbTimestampState *timestamp_states = NULL;
     int output_stream_count = 0;
     int selected_video_track_id = -1;
     int selected_audio_track_id = -1;
@@ -505,8 +511,9 @@ static KmbResult kmb_remux_fragmented_mp4_internal(
     }
 
     stream_mapping = av_calloc(input->nb_streams, sizeof(*stream_mapping));
-    if (stream_mapping == NULL) {
-        kmb_set_error(output_error, "Could not allocate stream mapping.");
+    timestamp_states = av_calloc(input->nb_streams, sizeof(*timestamp_states));
+    if (stream_mapping == NULL || timestamp_states == NULL) {
+        kmb_set_error(output_error, "Could not allocate stream mapping and timestamp state.");
         bridge_result = KMB_ALLOCATION_FAILED;
         goto cleanup;
     }
@@ -570,7 +577,7 @@ static KmbResult kmb_remux_fragmented_mp4_internal(
     av_dict_set(
         &muxer_options,
         "movflags",
-        "frag_keyframe+empty_moov+default_base_moof+negative_cts_offsets",
+        "frag_keyframe+delay_moov+default_base_moof+negative_cts_offsets",
         0
     );
     av_dict_set_int(&muxer_options, "frag_duration", fragment_duration_us, 0);
@@ -602,6 +609,11 @@ static KmbResult kmb_remux_fragmented_mp4_internal(
         }
         input_stream = input->streams[packet->stream_index];
         output_stream = output->streams[mapped_index];
+        kmb_prepare_packet_timestamps(
+            input_stream,
+            packet,
+            &timestamp_states[packet->stream_index]
+        );
         packet->stream_index = mapped_index;
         av_packet_rescale_ts(packet, input_stream->time_base, output_stream->time_base);
         packet->pos = -1;
@@ -636,6 +648,7 @@ cleanup:
     av_dict_free(&muxer_options);
     av_packet_free(&packet);
     av_freep(&stream_mapping);
+    av_freep(&timestamp_states);
     if (custom_io != NULL) {
         if (output != NULL) {
             output->pb = NULL;

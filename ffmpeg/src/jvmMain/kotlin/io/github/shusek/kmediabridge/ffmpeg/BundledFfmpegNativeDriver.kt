@@ -67,19 +67,34 @@ public class BundledFfmpegNativeDriver private constructor(
         request: BridgeRequest,
     ): BridgeSupport {
         val reason = unsupportedReason(input, request)
-        return if (reason == null) {
-            BridgeSupport.Supported(
-                confidence = if (request.subtitleHandling == SubtitleHandling.BURN_IN) 80 else 90,
+        if (reason != null) return BridgeSupport.Unsupported(reason)
+        if (request.videoHandling == VideoHandling.TONE_MAP_TO_SDR) {
+            val probe =
+                runCatching { probe(input) }.getOrElse { failure ->
+                    return BridgeSupport.Unsupported(failure.message ?: "The HDR input could not be probed safely.")
+                }
+            val video =
+                request.preferredVideoTrackId
+                    ?.let { requested -> probe.tracks.filterIsInstance<VideoTrackInfo>().firstOrNull { it.id == requested } }
+                    ?: probe.tracks.filterIsInstance<VideoTrackInfo>().firstOrNull()
+                    ?: return BridgeSupport.Unsupported("The requested HDR video track is unavailable.")
+            unsupportedDesktopToneMapVideo(video)?.let { return BridgeSupport.Unsupported(it) }
+            return BridgeSupport.Supported(
+                confidence = 85,
                 reason =
-                    if (request.subtitleHandling == SubtitleHandling.BURN_IN) {
-                        "The selected FFmpeg runtime can decode SDR video and composite text subtitles through libass."
-                    } else {
-                        "The selected FFmpeg runtime can remux this local input without re-encoding video."
-                    },
+                    "The selected FFmpeg runtime can decode PQ/HLG, apply the controlled BT.2020 transform, " +
+                        "and emit explicitly tagged limited-range BT.709 CMAF.",
             )
-        } else {
-            BridgeSupport.Unsupported(reason)
         }
+        return BridgeSupport.Supported(
+            confidence = if (request.subtitleHandling == SubtitleHandling.BURN_IN) 80 else 90,
+            reason =
+                if (request.subtitleHandling == SubtitleHandling.BURN_IN) {
+                    "The selected FFmpeg runtime can decode SDR video and composite text subtitles through libass."
+                } else {
+                    "The selected FFmpeg runtime can remux this local input without re-encoding video."
+                },
+        )
     }
 
     override suspend fun probe(input: MediaInput): MediaProbe {
@@ -131,6 +146,11 @@ public class BundledFfmpegNativeDriver private constructor(
         if (request.preferredSubtitleTrackId != null && subtitleTrack?.id != request.preferredSubtitleTrackId) {
             throw MediaBridgeException(MediaBridgeErrorCode.UNSUPPORTED_REQUEST, "The requested subtitle track is unavailable.")
         }
+        if (request.videoHandling == VideoHandling.TONE_MAP_TO_SDR) {
+            unsupportedDesktopToneMapVideo(videoTrack)?.let { reason ->
+                throw MediaBridgeException(MediaBridgeErrorCode.UNSUPPORTED_REQUEST, reason)
+            }
+        }
         if (request.subtitleHandling == SubtitleHandling.BURN_IN) {
             if (subtitleTrack == null || subtitleTrack.isImageBased) {
                 throw MediaBridgeException(
@@ -156,7 +176,10 @@ public class BundledFfmpegNativeDriver private constructor(
                 selectedSubtitleTrackId = subtitleTrack?.id,
                 inputColorInfo = videoTrack.colorInfo,
                 outputColorInfo =
-                    if (request.subtitleHandling == SubtitleHandling.BURN_IN) {
+                    if (
+                        request.videoHandling == VideoHandling.TONE_MAP_TO_SDR ||
+                        request.subtitleHandling == SubtitleHandling.BURN_IN
+                    ) {
                         SDR_BT709_COLOR_INFO
                     } else {
                         videoTrack.colorInfo
@@ -190,12 +213,15 @@ public class BundledFfmpegNativeDriver private constructor(
             input.requestHeaders.isNotEmpty() -> "Request headers are only supported for remote inputs."
             request.output != BridgeOutput.CMAF_FRAGMENT_STREAM ->
                 "The selected desktop driver currently emits a CMAF fragment stream."
+            request.videoHandling == VideoHandling.TONE_MAP_TO_SDR && !capabilities.canToneMapToSdr ->
+                "The selected runtime does not include the controlled HDR-to-SDR pipeline."
             request.subtitleHandling == SubtitleHandling.BURN_IN && !capabilities.canBurnSubtitles ->
                 "The selected runtime does not include the optional libass subtitle burn-in pipeline."
             request.subtitleHandling == SubtitleHandling.BURN_IN && request.videoHandling != VideoHandling.TRANSCODE_TO_SDR ->
                 "Subtitle burn-in requires explicit TRANSCODE_TO_SDR video handling."
-            request.subtitleHandling == SubtitleHandling.OMIT && request.videoHandling != VideoHandling.COPY ->
-                "The selected runtime copies compressed video unless subtitle burn-in is requested."
+            request.subtitleHandling == SubtitleHandling.OMIT &&
+                request.videoHandling !in setOf(VideoHandling.COPY, VideoHandling.TONE_MAP_TO_SDR) ->
+                "The selected runtime copies compressed video or performs explicit HDR-to-SDR tone mapping."
             request.audioHandling !in setOf(AudioHandling.OMIT, AudioHandling.COPY) ->
                 "The selected runtime currently copies or omits audio."
             request.subtitleHandling == SubtitleHandling.BURN_IN && request.preferredSubtitleTrackId == null ->
@@ -354,7 +380,16 @@ private class DesktopFfmpegSession(
                                 }
                             }
                         }
-                        if (outputInfo.subtitleHandling == SubtitleHandling.BURN_IN) {
+                        if (outputInfo.videoHandling == VideoHandling.TONE_MAP_TO_SDR) {
+                            runtime.toneMapHdrToSdrFragmentedMp4(
+                                inputLocator = input.locator,
+                                fragmentDurationUs = request.fragmentDurationUs,
+                                startTimeUs = active.positionUs,
+                                preferredVideoTrackId = outputInfo.selectedVideoTrackId ?: -1,
+                                preferredAudioTrackId = outputInfo.selectedAudioTrackId ?: -2,
+                                consumer = consumeBytes,
+                            )
+                        } else if (outputInfo.subtitleHandling == SubtitleHandling.BURN_IN) {
                             runtime.burnSubtitlesFragmentedMp4(
                                 inputLocator = input.locator,
                                 fragmentDurationUs = request.fragmentDurationUs,
@@ -386,4 +421,31 @@ private class DesktopFfmpegSession(
                 }
             nativeJob.join()
         }
+}
+
+internal fun unsupportedDesktopToneMapVideo(video: VideoTrackInfo): String? {
+    val color = video.colorInfo
+    return when {
+        color.dynamicRange == DynamicRangeFormat.DOLBY_VISION || color.dolbyVision != null ->
+            "Dolby Vision must use the profile-aware converter before SDR tone mapping."
+        color.dynamicRange !in
+            setOf(
+                DynamicRangeFormat.HDR10,
+                DynamicRangeFormat.HDR10_PLUS,
+                DynamicRangeFormat.HLG,
+            )
+        -> "The selected video is not explicitly identified as HDR10, HDR10+, or HLG."
+        color.primaries != ColorPrimaries.BT2020 ->
+            "The HDR input is not explicitly tagged with BT.2020 primaries."
+        color.transfer !in setOf(ColorTransfer.PQ, ColorTransfer.HLG) ->
+            "The HDR input has no supported explicit PQ or HLG transfer."
+        color.matrix != ColorMatrix.BT2020_NCL ->
+            "The HDR input does not use the supported BT.2020 non-constant-luminance matrix."
+        color.range !in setOf(ColorRange.LIMITED, ColorRange.FULL) ->
+            "The HDR input has no unambiguous limited or full color range."
+        video.width?.let { it <= 0 || it % 2 != 0 } == true ||
+            video.height?.let { it <= 0 || it % 2 != 0 } == true ->
+            "The HDR video dimensions cannot be represented by AVC 4:2:0 output."
+        else -> null
+    }
 }

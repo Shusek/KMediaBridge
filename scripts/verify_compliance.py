@@ -90,6 +90,7 @@ def verify_headers(root: Path) -> None:
     ]
     for directory in (
         root / "ffmpeg-runtime-desktop",
+        root / "ffmpeg-runtime-android",
         root / "native",
         root / "scripts",
     ):
@@ -181,7 +182,48 @@ def verify_manifest(root: Path) -> dict:
     release_verifier = (root / "scripts/verify_ffmpeg_release.sh").read_text(encoding="utf-8")
     if "FCF986EA15E6E293A5644F10B4322F04D67658D8" not in release_verifier:
         fail("The official FFmpeg release signing-key fingerprint is not pinned.")
+    verify_android_recipe(root, ffmpeg)
     return manifest
+
+
+def verify_android_recipe(root: Path, ffmpeg: dict) -> None:
+    recipe = (root / "native/build-ffmpeg-android.sh").read_text(encoding="utf-8")
+    arguments = set(
+        re.findall(
+            r'^\s+"(?P<argument>--[^"]+)"$',
+            recipe,
+            re.MULTILINE,
+        )
+    )
+    required = {
+        "--disable-gpl",
+        "--disable-nonfree",
+        "--disable-static",
+        "--enable-shared",
+        "--disable-autodetect",
+        "--enable-mediacodec",
+        "--enable-swscale",
+    }
+    if not required.issubset(arguments):
+        fail(
+            "The Android recipe is missing required LGPL/dynamic/MediaCodec flags: "
+            + ", ".join(sorted(required - arguments))
+        )
+    forbidden = sorted(arguments.intersection(FORBIDDEN_FLAGS))
+    if forbidden:
+        fail("Forbidden Android FFmpeg configuration: " + ", ".join(forbidden))
+    if f'source_version="{ffmpeg.get("version")}"' not in recipe:
+        fail("The Android recipe FFmpeg version differs from the manifest.")
+    if f'source_sha256="{ffmpeg.get("sourceSha256")}"' not in recipe:
+        fail("The Android recipe FFmpeg source hash differs from the manifest.")
+    for required_evidence in (
+        "llvm-readelf",
+        "dynamicLinkingVerified=true",
+        "ffmpeg-8.1.2-mediacodec-p010.patch",
+        "LICENSES/LGPL-2.1-or-later.txt",
+    ):
+        if required_evidence not in recipe:
+            fail(f"The Android recipe is missing required evidence: {required_evidence}.")
 
 
 def verify_subtitle_manifest(root: Path) -> dict:
@@ -268,6 +310,8 @@ def verify_required_files(root: Path, manifest: dict) -> None:
     license_map = (root / "LICENSE").read_text(encoding="utf-8")
     if INTERNAL_LICENSE not in license_map or LGPL_LICENSE not in license_map:
         fail("Root LICENSE must map both the internal core and LGPL runtime scopes.")
+    if "ffmpeg-runtime-android/**" not in license_map:
+        fail("Root LICENSE must assign the Android runtime to the LGPL scope.")
 
     internal_path = root / "LICENSES/LicenseRef-KMediaBridge-Internal.txt"
     lgpl_path = root / "LICENSES/LGPL-2.1-or-later.txt"
@@ -331,17 +375,22 @@ def verify_publication_routes(root: Path) -> None:
             if required not in build:
                 fail(f"{module} Maven Central publication is missing {required}.")
 
-    runtime_build = (root / "ffmpeg-runtime-desktop/build.gradle.kts").read_text(
-        encoding="utf-8"
-    )
-    for required in (
-        "githubPagesMavenRepository",
-        "publishToMavenCentral()",
-        "signAllPublications()",
-        "LICENSES/LGPL-2.1-or-later.txt",
-    ):
-        if required not in runtime_build:
-            fail(f"The public LGPL runtime publication is missing {required}.")
+    for runtime_module in ("ffmpeg-runtime-desktop", "ffmpeg-runtime-android"):
+        runtime_build = (root / runtime_module / "build.gradle.kts").read_text(
+            encoding="utf-8"
+        )
+        for required in (
+            "runtime-compliance-repository",
+            "githubPagesMavenRepository",
+            "publishToMavenCentral()",
+            "signAllPublications()",
+            "LICENSES/LGPL-2.1-or-later.txt",
+        ):
+            if required not in runtime_build:
+                fail(
+                    f"The public LGPL publication {runtime_module} is missing "
+                    f"{required}."
+                )
 
     release_workflow = (root / ".github/workflows/release.yml").read_text(
         encoding="utf-8"
@@ -354,7 +403,12 @@ def verify_publication_routes(root: Path) -> None:
     ):
         if forbidden in release_workflow:
             fail(f"Release workflow contains a forbidden route: {forbidden}.")
-    for required in (":ffmpeg-runtime-desktop:publishAllPublicationsToGithubPagesRepository",):
+    for required in (
+        ":ffmpeg-runtime-desktop:publishAllPublicationsToGithubPagesRepository",
+        ":ffmpeg-runtime-android:publishAllPublicationsToGithubPagesRepository",
+        "android-native-payload",
+        "androidNativePayloadDirectory",
+    ):
         if required not in release_workflow:
             fail(f"Release workflow is missing the expected route {required}.")
 
@@ -367,6 +421,8 @@ def verify_publication_routes(root: Path) -> None:
         "MAVEN_CENTRAL_PASSWORD",
         "MAVEN_SIGNING_KEY",
         "MAVEN_SIGNING_PASSWORD",
+        "android-native-payload.tar.gz",
+        "androidNativePayloadDirectory",
     ):
         if required not in central_workflow:
             fail(f"Maven Central publication is missing {required}.")
