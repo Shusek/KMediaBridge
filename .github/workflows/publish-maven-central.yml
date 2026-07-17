@@ -37,7 +37,7 @@ jobs:
         with:
           packages: ""
       - name: Install the Android platform used by the runtime AAR
-        run: sdkmanager "platforms;android-37"
+        run: sdkmanager "platforms;android-36"
       - name: Validate requested version
         shell: bash
         run: |

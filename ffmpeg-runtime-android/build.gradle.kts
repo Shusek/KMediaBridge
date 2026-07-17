@@ -242,7 +242,7 @@ val generateAndroidRuntimeResources =
 
 extensions.configure<LibraryExtension> {
     namespace = "io.github.shusek.kmediabridge.ffmpeg.runtime.android"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 23

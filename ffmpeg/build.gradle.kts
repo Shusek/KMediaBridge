@@ -17,7 +17,7 @@ kotlin {
 
     android {
         namespace = "io.github.shusek.kmediabridge.ffmpeg"
-        compileSdk = 37
+        compileSdk = 36
         minSdk = 23
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)

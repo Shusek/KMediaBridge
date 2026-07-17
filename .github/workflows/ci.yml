@@ -80,7 +80,7 @@ jobs:
         with:
           packages: ""
       - name: Install the Android platform used by the runtime AAR
-        run: sdkmanager "platforms;android-37"
+        run: sdkmanager "platforms;android-36"
       - name: Verify staged Maven publications
         run: ./gradlew --no-daemon complianceCheck -PpublicationVersion=0.4.2-CI
 
@@ -191,7 +191,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes gnupg
-          sdkmanager "platforms;android-37" "ndk;$ANDROID_NDK_VERSION"
+          sdkmanager "platforms;android-36" "ndk;$ANDROID_NDK_VERSION"
       - name: Verify the signed FFmpeg source release
         shell: bash
         run: |
