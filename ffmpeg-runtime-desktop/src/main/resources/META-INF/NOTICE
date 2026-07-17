@@ -1,7 +1,11 @@
 KMediaBridge bundled FFmpeg runtime
+Copyright (c) 2026 Shusek
 
-This optional artifact contains dynamically linked FFmpeg libraries built with
-GPL and nonfree components disabled. FFmpeg and KMediaBridge are distributed
-under LGPL-2.1-or-later. Exact corresponding source, build recipes, hashes,
-notices, and replacement instructions are linked by the embedded manifest and
-published beside each binary release.
+This optional artifact contains the LGPL-2.1-or-later KMediaBridge native
+bridge and dynamically linked FFmpeg libraries built with GPL and nonfree
+components disabled. Exact corresponding source, build recipes, hashes,
+third-party notices, and replacement instructions are embedded or published
+beside each binary release.
+
+The proprietary KMediaBridge Kotlin API and backend are not part of this
+runtime artifact.

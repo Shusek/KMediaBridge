@@ -11,7 +11,7 @@ plugins {
     alias(libs.plugins.ktlint)
 }
 
-val publicationVersion = providers.gradleProperty("publicationVersion").orElse("0.3.0-SNAPSHOT")
+val publicationVersion = providers.gradleProperty("publicationVersion").orElse("0.4.0-SNAPSHOT")
 val pythonExecutable = if (System.getProperty("os.name").startsWith("Windows")) "python" else "python3"
 
 allprojects {
@@ -66,6 +66,7 @@ val verifyCompliance =
                 include("compliance/**")
                 include("*.gradle.kts")
                 include("LICENSE")
+                include("LICENSES/**")
                 exclude("**/__pycache__/**")
             },
         )
@@ -100,19 +101,25 @@ val testRuntimeInspectionLogic =
 val verifyPublications =
     tasks.register<Exec>("verifyPublications") {
         group = "verification"
-        description = "Inspects publications and rejects undocumented native payloads."
+        description = "Verifies the private core and public LGPL runtime publication boundaries."
         dependsOn(
-            ":api:publishAllPublicationsToComplianceRepository",
-            ":ffmpeg:publishAllPublicationsToComplianceRepository",
-            ":ffmpeg-runtime-desktop:publishAllPublicationsToComplianceRepository",
+            ":api:publishAllPublicationsToPrivateComplianceRepository",
+            ":ffmpeg:publishAllPublicationsToPrivateComplianceRepository",
+            ":ffmpeg-runtime-desktop:publishAllPublicationsToPublicComplianceRepository",
         )
-        inputs.dir(layout.buildDirectory.dir("compliance-repository"))
+        inputs.dir(layout.buildDirectory.dir("private-compliance-repository"))
+        inputs.dir(layout.buildDirectory.dir("public-compliance-repository"))
         commandLine(
             pythonExecutable,
             "scripts/verify_publications.py",
-            "--repository",
+            "--private-repository",
             layout.buildDirectory
-                .dir("compliance-repository")
+                .dir("private-compliance-repository")
+                .get()
+                .asFile.absolutePath,
+            "--public-repository",
+            layout.buildDirectory
+                .dir("public-compliance-repository")
                 .get()
                 .asFile.absolutePath,
             "--version",

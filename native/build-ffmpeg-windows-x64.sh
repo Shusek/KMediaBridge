@@ -122,8 +122,10 @@ mkdir -p \
     "$output_dir/compliance/kmediabridge-source/native/src" \
     "$output_dir/compliance/kmediabridge-source/docs" \
     "$output_dir/compliance/kmediabridge-source/scripts"
-cp "$root_dir/LICENSE" "$output_dir/compliance/kmediabridge-source/LICENSE"
-cp "$root_dir/NOTICE" "$output_dir/compliance/kmediabridge-source/NOTICE"
+cp "$root_dir/LICENSES/LGPL-2.1-or-later.txt" "$output_dir/compliance/kmediabridge-source/LICENSE"
+cp \
+    "$root_dir/ffmpeg-runtime-desktop/src/main/resources/META-INF/NOTICE" \
+    "$output_dir/compliance/kmediabridge-source/NOTICE"
 cp "$root_dir/THIRD_PARTY_NOTICES.md" "$output_dir/compliance/kmediabridge-source/THIRD_PARTY_NOTICES.md"
 cp "$root_dir/docs/COMPLIANCE.md" "$output_dir/compliance/kmediabridge-source/docs/COMPLIANCE.md"
 cp "$root_dir/docs/RELINKING.md" "$output_dir/compliance/kmediabridge-source/docs/RELINKING.md"

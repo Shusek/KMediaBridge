@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
-name: Publish to Maven Central
+name: Publish LGPL runtime to Maven Central
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   central:
-    name: Publish signed artifacts
+    name: Publish signed LGPL runtime
     runs-on: macos-15
     steps:
       - name: Check out the requested immutable tag
@@ -61,6 +61,6 @@ jobs:
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.MAVEN_SIGNING_PASSWORD }}
         run: >-
           ./gradlew --no-daemon --no-configuration-cache
-          publishAndReleaseToMavenCentral
+          :ffmpeg-runtime-desktop:publishAndReleaseToMavenCentral
           -PpublicationVersion=${{ inputs.version }}
           -PnativePayloadDirectory="$RUNNER_TEMP/native-resources"

@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 1,
-  "projectLicense": "LGPL-2.1-or-later",
+  "schemaVersion": 2,
+  "runtimeLicense": "LGPL-2.1-or-later",
   "distributionStatus": "source-only",
   "ffmpeg": {
     "version": "8.1.2",
@@ -38,6 +38,8 @@
   "nativePayloads": [],
   "requiredDistributionFiles": [
     "LICENSE",
+    "LICENSES/LicenseRef-KMediaBridge-Internal.txt",
+    "LICENSES/LGPL-2.1-or-later.txt",
     "NOTICE",
     "THIRD_PARTY_NOTICES.md",
     "gradle/wrapper/LICENSE",

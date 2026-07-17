@@ -24,8 +24,12 @@ tasks.withType<Jar>().configureEach {
 }
 
 tasks.named<ProcessResources>("processResources") {
-    from(rootProject.layout.projectDirectory.file("LICENSE")) {
+    from(
+        rootProject.layout.projectDirectory
+            .file("LICENSES/LGPL-2.1-or-later.txt"),
+    ) {
         into("META-INF")
+        rename { "LICENSE" }
     }
     from(rootProject.layout.projectDirectory.file("THIRD_PARTY_NOTICES.md")) {
         into("META-INF")
@@ -35,8 +39,13 @@ tasks.named<ProcessResources>("processResources") {
 publishing {
     repositories {
         maven {
-            name = "compliance"
-            url = rootProject.layout.buildDirectory.dir("compliance-repository").get().asFile.toURI()
+            name = "publicCompliance"
+            url =
+                rootProject.layout.buildDirectory
+                    .dir("public-compliance-repository")
+                    .get()
+                    .asFile
+                    .toURI()
         }
         rootProject.providers.gradleProperty("githubPagesMavenRepository").orNull?.let { repositoryPath ->
             maven {

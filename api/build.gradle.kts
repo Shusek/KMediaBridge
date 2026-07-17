@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-2.1-or-later
+// SPDX-License-Identifier: LicenseRef-KMediaBridge-Internal
 @file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
 
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -59,18 +59,41 @@ kotlin {
 publishing {
     repositories {
         maven {
-            name = "compliance"
+            name = "privateCompliance"
             url =
                 rootProject.layout.buildDirectory
-                    .dir("compliance-repository")
+                    .dir("private-compliance-repository")
                     .get()
                     .asFile
                     .toURI()
         }
-        rootProject.providers.gradleProperty("githubPagesMavenRepository").orNull?.let { repositoryPath ->
+        rootProject.providers.gradleProperty("privateMavenRepositoryUrl").orNull?.let { repositoryUrl ->
+            check(repositoryUrl.isNotBlank()) {
+                "privateMavenRepositoryUrl must not be blank."
+            }
+            val repositoryUri = uri(repositoryUrl)
+            check(repositoryUri.scheme == "https" && repositoryUri.userInfo == null) {
+                "privateMavenRepositoryUrl must be an HTTPS URL without embedded credentials."
+            }
+            val repositoryUsername =
+                rootProject.providers
+                    .gradleProperty("privateMavenRepositoryUsername")
+                    .orNull
+                    ?.takeIf(String::isNotBlank)
+                    ?: error("privateMavenRepositoryUsername is required for private core publication.")
+            val repositoryPassword =
+                rootProject.providers
+                    .gradleProperty("privateMavenRepositoryPassword")
+                    .orNull
+                    ?.takeIf(String::isNotBlank)
+                    ?: error("privateMavenRepositoryPassword is required for private core publication.")
             maven {
-                name = "githubPages"
-                url = uri(repositoryPath)
+                name = "privateCore"
+                url = repositoryUri
+                credentials {
+                    username = repositoryUsername
+                    password = repositoryPassword
+                }
             }
         }
     }
@@ -91,8 +114,14 @@ mavenPublishing {
 
         licenses {
             license {
-                name.set("GNU Lesser General Public License v2.1 or later")
-                url.set("https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html")
+                name.set(
+                    "KMediaBridge Internal Use Notice and Limited License " +
+                        "(LicenseRef-KMediaBridge-Internal)",
+                )
+                url.set(
+                    "https://github.com/Shusek/KMediaBridge/blob/main/" +
+                        "LICENSES/LicenseRef-KMediaBridge-Internal.txt",
+                )
                 distribution.set("repo")
             }
         }
@@ -107,10 +136,5 @@ mavenPublishing {
             developerConnection.set("scm:git:ssh://git@github.com/Shusek/KMediaBridge.git")
             url.set("https://github.com/Shusek/KMediaBridge")
         }
-    }
-
-    publishToMavenCentral()
-    if (providers.gradleProperty("signingInMemoryKey").isPresent) {
-        signAllPublications()
     }
 }

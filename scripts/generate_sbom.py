@@ -12,11 +12,21 @@ import re
 from pathlib import Path
 
 
+INTERNAL_LICENSE = "LicenseRef-KMediaBridge-Internal"
+LGPL_LICENSE = "LGPL-2.1-or-later"
+
+
 def version_from_catalog(catalog: str, name: str) -> str:
     match = re.search(rf"^{re.escape(name)}\s*=\s*\"([^\"]+)\"\s*$", catalog, re.MULTILINE)
     if match is None:
         raise ValueError(f"Missing version {name!r} in Gradle catalog")
     return match.group(1)
+
+
+def license_choice(license_expression: str) -> dict:
+    if license_expression.startswith("LicenseRef-"):
+        return {"expression": license_expression}
+    return {"license": {"id": license_expression}}
 
 
 def component(name: str, version: str, license_id: str, scope: str = "required") -> dict:
@@ -27,7 +37,7 @@ def component(name: str, version: str, license_id: str, scope: str = "required")
         "name": name,
         "version": version,
         "scope": scope,
-        "licenses": [{"license": {"id": license_id}}],
+        "licenses": [license_choice(license_id)],
     }
 
 
@@ -40,6 +50,12 @@ def main() -> int:
 
     root = Path(__file__).resolve().parent.parent
     manifest = json.loads((root / "compliance/ffmpeg/manifest.json").read_text(encoding="utf-8"))
+    if (
+        manifest.get("schemaVersion") != 2
+        or manifest.get("runtimeLicense") != LGPL_LICENSE
+        or "projectLicense" in manifest
+    ):
+        raise ValueError("FFmpeg compliance evidence must declare the LGPL runtime boundary")
     subtitle_manifest = json.loads(
         (root / "compliance/subtitles/manifest.json").read_text(encoding="utf-8")
     )
@@ -66,6 +82,12 @@ def main() -> int:
         if runtime_manifest_path is not None and runtime_manifest_path.is_file()
         else None
     )
+    if runtime_manifest is not None and (
+        runtime_manifest.get("schemaVersion") != 2
+        or runtime_manifest.get("runtimeLicense") != LGPL_LICENSE
+        or "projectLicense" in runtime_manifest
+    ):
+        raise ValueError("Binary runtime evidence must declare the LGPL runtime boundary")
     distribution_status = "binary" if runtime_manifest is not None else "source-only"
     ffmpeg_source_url = (
         runtime_manifest["ffmpeg"]["sourceOfferUrl"]
@@ -84,16 +106,32 @@ def main() -> int:
                 "bom-ref": "pkg:github/Shusek/KMediaBridge",
                 "name": "KMediaBridge",
                 "version": project_version,
-                "licenses": [{"license": {"id": "LGPL-2.1-or-later"}}],
+                "licenses": [
+                    {
+                        "license": {
+                            "name": "Mixed licensing; see component-level declarations"
+                        }
+                    }
+                ],
+                "properties": [
+                    {
+                        "name": "kmediabridge:coreLicense",
+                        "value": INTERNAL_LICENSE,
+                    },
+                    {
+                        "name": "kmediabridge:runtimeLicense",
+                        "value": LGPL_LICENSE,
+                    },
+                ],
             }
         },
         "components": [
-            component("kmedia-bridge-api", project_version, "LGPL-2.1-or-later"),
-            component("kmedia-bridge-ffmpeg", project_version, "LGPL-2.1-or-later", "optional"),
+            component("kmedia-bridge-api", project_version, INTERNAL_LICENSE),
+            component("kmedia-bridge-ffmpeg", project_version, INTERNAL_LICENSE, "optional"),
             component(
                 "kmedia-bridge-ffmpeg-runtime-desktop",
                 project_version,
-                "LGPL-2.1-or-later",
+                LGPL_LICENSE,
                 "optional",
             ),
             {
@@ -121,7 +159,7 @@ def main() -> int:
                 "name": "jna",
                 "version": jna_version,
                 "scope": "optional",
-                "licenses": [{"license": {"id": "LGPL-2.1-or-later"}}],
+                "licenses": [{"license": {"id": "Apache-2.0"}}],
                 "externalReferences": [
                     {"type": "vcs", "url": "https://github.com/java-native-access/jna"}
                 ],

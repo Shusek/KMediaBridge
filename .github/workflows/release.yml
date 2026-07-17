@@ -142,7 +142,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    name: Publish Kotlin and native artifacts
+    name: Publish internal core and LGPL runtime
     needs: native
     runs-on: macos-15
     steps:
@@ -192,6 +192,16 @@ jobs:
           ./gradlew --no-daemon check complianceCheck
           -PpublicationVersion=${{ steps.version.outputs.value }}
           -PnativePayloadDirectory="$RUNNER_TEMP/native-resources"
+      - name: Publish the internal-use Kotlin core
+        env:
+          ORG_GRADLE_PROJECT_privateMavenRepositoryUrl: ${{ vars.KMEDIA_BRIDGE_PRIVATE_MAVEN_URL }}
+          ORG_GRADLE_PROJECT_privateMavenRepositoryUsername: ${{ vars.KMEDIA_BRIDGE_PRIVATE_MAVEN_USERNAME }}
+          ORG_GRADLE_PROJECT_privateMavenRepositoryPassword: ${{ secrets.KMEDIA_BRIDGE_PRIVATE_MAVEN_PASSWORD }}
+        run: >-
+          ./gradlew --no-daemon
+          :api:publishAllPublicationsToPrivateCoreRepository
+          :ffmpeg:publishAllPublicationsToPrivateCoreRepository
+          -PpublicationVersion=${{ steps.version.outputs.value }}
       - name: Prepare the version-preserving Pages repository
         id: pages
         shell: bash
@@ -211,8 +221,6 @@ jobs:
       - name: Publish Maven repository to the Pages worktree
         run: >-
           ./gradlew --no-daemon
-          :api:publishAllPublicationsToGithubPagesRepository
-          :ffmpeg:publishAllPublicationsToGithubPagesRepository
           :ffmpeg-runtime-desktop:publishAllPublicationsToGithubPagesRepository
           -PpublicationVersion=${{ steps.version.outputs.value }}
           -PnativePayloadDirectory="$RUNNER_TEMP/native-resources"
@@ -265,7 +273,7 @@ jobs:
           tar -czf "$evidence/kmedia-bridge-$version-native-resources.tar.gz" \
             -C "$RUNNER_TEMP/native-resources" .
           tar -czf "$evidence/kmedia-bridge-$version-compliance.tar.gz" \
-            LICENSE NOTICE THIRD_PARTY_NOTICES.md docs compliance native scripts
+            LICENSE LICENSES NOTICE THIRD_PARTY_NOTICES.md docs compliance native scripts
           (
             cd "$evidence"
             shasum -a 256 ./* > SHA256SUMS

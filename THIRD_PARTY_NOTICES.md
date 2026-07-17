@@ -42,7 +42,8 @@ stack.
 
 The desktop JVM backend uses JNA to call the narrow native C ABI without an
 FFmpeg executable. JNA is offered under `Apache-2.0 OR LGPL-2.1-or-later`;
-KMediaBridge elects the LGPL-2.1-or-later option for this distribution.
+KMediaBridge elects the Apache-2.0 option for the proprietary Kotlin backend.
+JNA is not part of the separately distributed LGPL native runtime artifact.
 
 - Project: https://github.com/java-native-access/jna
 - Artifact: `net.java.dev.jna:jna:5.19.1`

@@ -1,10 +1,15 @@
 KMediaBridge
 Copyright (c) 2026 Shusek
 
-KMediaBridge is licensed under the GNU Lesser General Public License,
-version 2.1 or (at your option) any later version.
+KMediaBridge 0.4.0 and later use a mixed-license boundary:
 
-The optional desktop runtime redistributes dynamically linked FFmpeg libraries
-only in stable releases that also publish the exact corresponding source,
-build recipes, configuration, notices, replacement instructions, and checksums
-required by docs/COMPLIANCE.md.
+- the first-party Kotlin API and backend are covered by the KMediaBridge
+  Internal Use Notice and Limited License;
+- the native bridge, bundled runtime, rebuild/relinking material, and
+  compliance tooling are LGPL-2.1-or-later;
+- bundled third-party components retain the licenses listed in
+  THIRD_PARTY_NOTICES.md.
+
+See LICENSE for the authoritative scope map and LICENSES/ for the complete
+license texts. Versions released through 0.3.0 retain the LGPL license
+conveyed with those versions.

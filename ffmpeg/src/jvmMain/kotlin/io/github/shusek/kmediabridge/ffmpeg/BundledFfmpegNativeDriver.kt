@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-2.1-or-later
+// SPDX-License-Identifier: LicenseRef-KMediaBridge-Internal
 
 package io.github.shusek.kmediabridge.ffmpeg
 
@@ -245,9 +245,9 @@ public class BundledFfmpegNativeDriver private constructor(
          *
          * Preference policies fall back only when the preferred source has no
          * manifest. A present but technically invalid runtime is rejected
-         * instead of being silently bypassed. KMediaBridge's LGPL distribution
-         * gate applies to the bundled payload; external licensing is managed by
-         * the caller and reported through [FfmpegRuntimeInfo].
+         * instead of being silently bypassed. The native runtime's LGPL
+         * distribution gate applies to the bundled payload; external licensing
+         * is managed by the caller and reported through [FfmpegRuntimeInfo].
          */
         @JvmStatic
         @JvmOverloads

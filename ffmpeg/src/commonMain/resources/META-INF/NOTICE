@@ -1,10 +1,8 @@
-KMediaBridge
+KMediaBridge FFmpeg backend
 Copyright (c) 2026 Shusek
 
-KMediaBridge is licensed under the GNU Lesser General Public License,
-version 2.1 or (at your option) any later version.
-
-The optional desktop runtime redistributes dynamically linked FFmpeg libraries
-only in stable releases that also publish the exact corresponding source,
-build recipes, configuration, notices, replacement instructions, and checksums
-required by docs/COMPLIANCE.md.
+The first-party Kotlin backend is covered by the KMediaBridge Internal Use
+Notice and Limited License. It can load a separately distributed, replaceable
+LGPL native runtime. FFmpeg, FriBidi, libass, and the other runtime components
+retain the licenses and replacement rights described by the embedded
+compliance manifests and the runtime artifact's notices.

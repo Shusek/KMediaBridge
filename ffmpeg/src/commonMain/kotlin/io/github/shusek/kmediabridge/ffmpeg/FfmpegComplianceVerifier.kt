@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-2.1-or-later
+// SPDX-License-Identifier: LicenseRef-KMediaBridge-Internal
 
 package io.github.shusek.kmediabridge.ffmpeg
 
@@ -141,7 +141,7 @@ public object FfmpegComplianceVerifier {
     }
 
     /**
-     * Applies KMediaBridge's LGPL redistribution gate only to a native payload
+     * Applies the native runtime's LGPL redistribution gate only to a payload
      * conveyed by KMediaBridge. A caller-provided runtime is still expected to
      * pass the loader's ABI, identity, path, and hash checks, but its effective
      * license and any resulting application obligations belong to the caller.

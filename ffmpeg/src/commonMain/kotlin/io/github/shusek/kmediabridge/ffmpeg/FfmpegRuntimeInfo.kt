@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-2.1-or-later
+// SPDX-License-Identifier: LicenseRef-KMediaBridge-Internal
 
 package io.github.shusek.kmediabridge.ffmpeg
 
@@ -41,9 +41,9 @@ public data class FfmpegRuntimeInfo(
     public val origin: FfmpegRuntimeOrigin = FfmpegRuntimeOrigin.BUNDLED,
 ) {
     /**
-     * Bundled payloads are covered by KMediaBridge's fail-closed LGPL release
-     * policy. External payloads may use another effective license, including
-     * GPL, and remain the caller's distribution responsibility.
+     * Bundled payloads are covered by the native runtime's fail-closed LGPL
+     * release policy. External payloads may use another effective license,
+     * including GPL, and remain the caller's distribution responsibility.
      */
     public val complianceScope: FfmpegRuntimeComplianceScope
         get() =

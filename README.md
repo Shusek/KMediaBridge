@@ -12,24 +12,54 @@ pinned FFmpeg source with GPL and nonfree components disabled.
 
 ## Artifacts
 
+Starting with 0.4.0, the Kotlin API and backend are internal-use artifacts.
+They are published only to the maintainer-configured private Maven repository.
+The independently replaceable native runtime remains a public LGPL artifact:
+
 ```kotlin
-repositories {
-    maven("https://shusek.github.io/KMediaBridge/maven")
+dependencyResolutionManagement {
+    repositories {
+        maven {
+            name = "kmediaBridgePrivate"
+            url = uri(providers.gradleProperty("kmediaBridgeRepository").get())
+            credentials {
+                username = providers.gradleProperty("kmediaBridgeRepositoryUsername").get()
+                password = providers.gradleProperty("kmediaBridgeRepositoryPassword").get()
+            }
+            content {
+                includeGroup("io.github.shusek")
+            }
+        }
+        maven("https://shusek.github.io/KMediaBridge/maven") {
+            content {
+                includeModule(
+                    "io.github.shusek",
+                    "kmedia-bridge-ffmpeg-runtime-desktop",
+                )
+            }
+        }
+    }
 }
 
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("io.github.shusek:kmedia-bridge-api:0.3.0")
-            implementation("io.github.shusek:kmedia-bridge-ffmpeg:0.3.0")
+            implementation("io.github.shusek:kmedia-bridge-api:0.4.0")
+            implementation("io.github.shusek:kmedia-bridge-ffmpeg:0.4.0")
         }
         jvmMain.dependencies {
             // Optional and intentionally separate from the API.
-            runtimeOnly("io.github.shusek:kmedia-bridge-ffmpeg-runtime-desktop:0.3.0")
+            runtimeOnly("io.github.shusek:kmedia-bridge-ffmpeg-runtime-desktop:0.4.0")
         }
     }
 }
 ```
+
+Keep the three consumer properties outside the repository, for example in the
+user Gradle home or through `ORG_GRADLE_PROJECT_*` environment-variable names.
+Never commit their values. Publisher CI analogously receives only the named
+`privateMavenRepositoryUrl`, `privateMavenRepositoryUsername`, and
+`privateMavenRepositoryPassword` properties.
 
 - `kmedia-bridge-api` contains engine-neutral KMP models and session contracts.
 - `kmedia-bridge-ffmpeg` contains the common backend plus the desktop JVM
@@ -104,7 +134,11 @@ private temporary directory, verifies every SHA-256, loads dependencies in a
 fixed order, and asks the running library for its ABI, version, license, and
 configure line before it accepts media.
 
-## What 0.3.0 does
+The historical 0.3.0 API, backend, and runtime remain at the public Pages
+repository under the LGPL terms conveyed with that release. New internal-use
+core artifacts are never added there.
+
+## What the bridge does
 
 - probes local, unencrypted files without logging their paths;
 - exposes typed video, audio and subtitle tracks and explicit track selection;
@@ -125,7 +159,7 @@ the remux-only flavor until their reviewed native encoders are enabled.
 KMediaPlayer still chooses and confirms the actual AVFoundation/Media
 Foundation/GStreamer/rendering path after receiving the fMP4 stream. Android
 and Apple Kotlin/Native payloads remain separate future artifacts; the bundled
-0.3.0 runtime is for desktop JVM.
+runtime described here is for desktop JVM.
 
 The FFmpeg dylib/SONAME/DLL names use a private `-kmb` suffix. Native loading is
 local rather than process-global; Darwin additionally uses first-image symbol
@@ -135,14 +169,16 @@ FFmpeg (or the reverse). Loading both still consumes memory, so KMediaPlayer
 selects one fallback for a request and the manifest-only inspection avoids eager
 loading.
 
-## LGPL distribution and external runtimes
+## Mixed license boundary and external runtimes
 
-KMediaBridge and the FFmpeg payload conveyed by its runtime artifact are
-LGPL-2.1-or-later. Native libraries are dynamically linked and never committed
-to Git; release CI builds them from the exact pinned source. Each stable release
-publishes the matching source archive, recipes, configure lines, compiler
-identity, native hashes, SBOM, platform bundles, and relinking instructions
-beside the Maven artifact.
+The first-party Kotlin API and backend are covered by the KMediaBridge Internal
+Use Notice and Limited License. The native bridge, runtime artifact, rebuild
+and relinking material, and compliance tooling are LGPL-2.1-or-later. Native
+libraries are dynamically linked and never committed to Git; release CI builds
+them from the exact pinned source. Each stable release publishes the matching
+source archive, recipes, configure lines, compiler identity, native hashes,
+SBOM, platform bundles, and relinking instructions beside the public runtime
+artifact. See [LICENSE](LICENSE) for the exact scope map.
 
 A user may provide rebuilt libraries without changing KMediaBridge:
 
@@ -154,12 +190,12 @@ val driver = BundledFfmpegNativeDriver.load(
 )
 ```
 
-The external directory supplies its own `manifest.properties`. Technical checks
-remain fail-closed, but the KMediaBridge LGPL publication gate does not reject a
-GPL runtime that the caller supplied and KMediaBridge did not convey. Such a
-runtime has `complianceScope == CALLER_PROVIDED`; the application author or
-operator is responsible for determining whether and how the resulting
-combination may be distributed. See [Compliance](docs/COMPLIANCE.md),
+The external directory supplies its own `manifest.properties`. Technical
+checks remain fail-closed, but the native-runtime LGPL publication gate does
+not reject a GPL runtime that the caller supplied and KMediaBridge did not
+convey. Such a runtime has `complianceScope == CALLER_PROVIDED`; the application
+author or operator is responsible for determining whether and how the
+resulting combination may be distributed. See [Compliance](docs/COMPLIANCE.md),
 [Relinking](docs/RELINKING.md), and [Architecture](docs/ARCHITECTURE.md).
 
 Run the complete source and publication gate with:

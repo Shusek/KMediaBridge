@@ -172,7 +172,7 @@ def main() -> int:
 
     aggregate = {
         "schemaVersion": 2,
-        "projectLicense": "LGPL-2.1-or-later",
+        "runtimeLicense": "LGPL-2.1-or-later",
         "distributionStatus": "binary",
         "artifact": "kmedia-bridge-ffmpeg-runtime-desktop",
         "version": arguments.version,

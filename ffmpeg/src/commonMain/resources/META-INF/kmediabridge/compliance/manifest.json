@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 1,
-  "projectLicense": "LGPL-2.1-or-later",
+  "schemaVersion": 2,
+  "runtimeLicense": "LGPL-2.1-or-later",
   "distributionStatus": "source-only",
   "ffmpeg": {
     "version": "8.1.2",

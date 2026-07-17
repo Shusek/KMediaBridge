@@ -6,18 +6,18 @@
 application / KMediaPlayer
         |
         v
-kmedia-bridge-api (Kotlin Multiplatform)
+kmedia-bridge-api (Kotlin Multiplatform, internal-use license)
         |
         v
-kmedia-bridge-ffmpeg (runtime policy + orchestration)
+kmedia-bridge-ffmpeg (runtime policy + orchestration, internal-use license)
         |
         v
-versioned C ABI: kmedia_bridge.h
+versioned C ABI: kmedia_bridge.h (LGPL-2.1-or-later)
         |
         v
-dynamically linked FFmpeg libraries
+dynamically linked FFmpeg libraries (LGPL-2.1-or-later)
 
-kmedia-bridge-ffmpeg-runtime-desktop (runtimeOnly resources)
+kmedia-bridge-ffmpeg-runtime-desktop (public LGPL runtimeOnly resources)
         |
         +-- macOS arm64/x64 dylibs
         +-- Linux x64 shared objects

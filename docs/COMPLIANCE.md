@@ -12,13 +12,20 @@ hashes, and runtime identity, while licensing and distribution analysis remain
 the caller's responsibility. Passing the loader is not a compliance
 certification.
 
-## Project license
+## License boundary
 
-- All KMediaBridge source is LGPL-2.1-or-later.
-- Source files carry an SPDX identifier.
-- Maven POMs identify LGPL-2.1-or-later and link to the repository license.
+- `api/**` and the first-party Kotlin implementation in `ffmpeg/**` use
+  `LicenseRef-KMediaBridge-Internal`.
+- `native/**`, the runtime artifact, rebuild/relinking material, and compliance
+  tooling remain LGPL-2.1-or-later.
+- Source files carry the SPDX identifier assigned by the root `LICENSE` map.
+- Private core POMs identify the internal-use license; the public runtime POM
+  identifies LGPL-2.1-or-later.
+- Publication verification fails if a 0.4.0-or-later core artifact enters the
+  public runtime repository or if a runtime artifact enters the private core
+  repository.
 - Application licenses must not impose restrictions on the rights granted for
-  KMediaBridge or redistributed FFmpeg components.
+  the native bridge, FFmpeg, FriBidi, or other redistributed LGPL components.
 
 ## FFmpeg build boundary
 
@@ -48,7 +55,7 @@ Every native payload release must contain or link immutably to:
 2. Source archives for every statically linked external component.
 3. The immutable KMediaBridge build recipe revision and all patches.
 4. The full configure line and compiler/linker versions.
-5. LGPL texts and third-party notices.
+5. Complete LGPL texts and third-party notices.
 6. SHA-256 hashes for sources and native files.
 7. A CycloneDX SBOM.
 8. A source offer hosted beside the downloadable binary.
@@ -71,6 +78,9 @@ that review and its replacement/relinking procedure are documented.
 
 ## Secret handling
 
-Builds use only secret *names* in workflow definitions. No credential value,
-signed URL, media access token, or private package credential belongs in the
-repository, command line, build log, SBOM, manifest, or source offer.
+Builds use only secret *names* in workflow definitions. Private publication
+receives the `privateMavenRepositoryUrl`,
+`privateMavenRepositoryUsername`, and `privateMavenRepositoryPassword` Gradle
+properties from external CI configuration. No credential value, signed URL,
+media access token, or private package credential belongs in the repository,
+command line, build log, SBOM, manifest, or source offer.

@@ -15,6 +15,8 @@ from urllib.parse import urlsplit
 
 
 SOURCE_SUFFIXES = {".c", ".h", ".kt", ".kts", ".ps1", ".py", ".sh"}
+INTERNAL_LICENSE = "LicenseRef-KMediaBridge-Internal"
+LGPL_LICENSE = "LGPL-2.1-or-later"
 BINARY_SUFFIXES = {
     ".a",
     ".bc",
@@ -63,27 +65,51 @@ def require_public_https_url(label: str, value: str) -> None:
         fail(f"{label} must be a public HTTPS URL without embedded credentials: {value!r}")
 
 
+def source_files(directory: Path) -> list[Path]:
+    if not directory.exists():
+        return []
+    return [
+        path
+        for path in directory.rglob("*")
+        if path.is_file()
+        and path.suffix in SOURCE_SUFFIXES
+        and not {"build", "__pycache__"}.intersection(path.relative_to(directory).parts)
+    ]
+
+
 def verify_headers(root: Path) -> None:
-    candidates: list[Path] = [root / "build.gradle.kts", root / "settings.gradle.kts"]
+    internal_candidates: list[Path] = []
+    for module in ("api", "ffmpeg"):
+        module_root = root / module
+        internal_candidates.append(module_root / "build.gradle.kts")
+        internal_candidates.extend(source_files(module_root / "src"))
+
+    lgpl_candidates: list[Path] = [
+        root / "build.gradle.kts",
+        root / "settings.gradle.kts",
+    ]
     for directory in (
-        root / "api",
-        root / "ffmpeg",
         root / "ffmpeg-runtime-desktop",
         root / "native",
         root / "scripts",
     ):
-        if directory.exists():
-            candidates.extend(path for path in directory.rglob("*") if path.suffix in SOURCE_SUFFIXES)
+        lgpl_candidates.extend(source_files(directory))
 
-    missing: list[str] = []
-    for path in sorted(set(candidates)):
-        if not path.is_file():
-            continue
-        opening = "\n".join(path.read_text(encoding="utf-8").splitlines()[:4])
-        if "SPDX-License-Identifier: LGPL-2.1-or-later" not in opening:
-            missing.append(str(path.relative_to(root)))
-    if missing:
-        fail("Missing LGPL SPDX headers: " + ", ".join(missing))
+    problems: list[str] = []
+    for expected, candidates in (
+        (INTERNAL_LICENSE, internal_candidates),
+        (LGPL_LICENSE, lgpl_candidates),
+    ):
+        marker = f"SPDX-License-Identifier: {expected}"
+        for path in sorted(set(candidates)):
+            if not path.is_file():
+                problems.append(f"{path.relative_to(root)} (missing)")
+                continue
+            opening = "\n".join(path.read_text(encoding="utf-8").splitlines()[:4])
+            if marker not in opening:
+                problems.append(f"{path.relative_to(root)} (expected {expected})")
+    if problems:
+        fail("Missing or incorrect SPDX headers: " + ", ".join(problems))
 
 
 def verify_manifest(root: Path) -> dict:
@@ -95,17 +121,21 @@ def verify_manifest(root: Path) -> dict:
     manifest = load_json(manifest_path)
     embedded = load_json(embedded_path)
 
-    if manifest.get("schemaVersion") != 1:
+    if manifest.get("schemaVersion") != 2 or embedded.get("schemaVersion") != 2:
         fail("Unsupported compliance manifest schema version.")
-    if manifest.get("projectLicense") != "LGPL-2.1-or-later":
-        fail("The project license declaration must be LGPL-2.1-or-later.")
+    if manifest.get("runtimeLicense") != LGPL_LICENSE:
+        fail("The native runtime license declaration must be LGPL-2.1-or-later.")
+    if "projectLicense" in manifest or "projectLicense" in embedded:
+        fail("Runtime manifests must not describe LGPL as the whole-project license.")
     if embedded.get("ffmpeg") != manifest.get("ffmpeg"):
         fail("The embedded FFmpeg manifest does not match the release manifest.")
+    if embedded.get("runtimeLicense") != manifest.get("runtimeLicense"):
+        fail("Embedded and release runtime licenses differ.")
     if embedded.get("distributionStatus") != manifest.get("distributionStatus"):
         fail("Embedded and release distribution statuses differ.")
 
     ffmpeg = manifest.get("ffmpeg", {})
-    if ffmpeg.get("license") not in {"LGPL-2.1-or-later", "LGPL-3.0-or-later"}:
+    if ffmpeg.get("license") not in {LGPL_LICENSE, "LGPL-3.0-or-later"}:
         fail("The pinned FFmpeg source is not declared under an accepted LGPL expression.")
     if ffmpeg.get("linkage") != "dynamic":
         fail("Official FFmpeg payloads must declare a dynamic linking boundary.")
@@ -235,9 +265,37 @@ def verify_required_files(root: Path, manifest: dict) -> None:
     if missing:
         fail("Missing distribution files: " + ", ".join(missing))
 
-    license_text = (root / "LICENSE").read_text(encoding="utf-8")
-    if "GNU LESSER GENERAL PUBLIC LICENSE" not in license_text or "Version 2.1" not in license_text:
-        fail("LICENSE is not the complete GNU LGPL v2.1 text.")
+    license_map = (root / "LICENSE").read_text(encoding="utf-8")
+    if INTERNAL_LICENSE not in license_map or LGPL_LICENSE not in license_map:
+        fail("Root LICENSE must map both the internal core and LGPL runtime scopes.")
+
+    internal_path = root / "LICENSES/LicenseRef-KMediaBridge-Internal.txt"
+    lgpl_path = root / "LICENSES/LGPL-2.1-or-later.txt"
+    if not internal_path.is_file() or not lgpl_path.is_file():
+        fail("The dedicated internal and LGPL license texts must both be present.")
+
+    internal_text = internal_path.read_text(encoding="utf-8")
+    if "Internal Use Notice and Limited License" not in internal_text:
+        fail("The KMediaBridge internal-use license text is incomplete.")
+    lgpl_text = lgpl_path.read_text(encoding="utf-8")
+    if "GNU LESSER GENERAL PUBLIC LICENSE" not in lgpl_text or "Version 2.1" not in lgpl_text:
+        fail("LICENSES/LGPL-2.1-or-later.txt is not the complete GNU LGPL v2.1 text.")
+
+    for resource in (
+        root / "api/src/commonMain/resources/META-INF/LICENSE",
+        root / "ffmpeg/src/commonMain/resources/META-INF/LICENSE",
+    ):
+        resource_text = resource.read_text(encoding="utf-8")
+        if (
+            "Internal Use Notice and Limited License" not in resource_text
+            or "authorized collaborators" not in resource_text
+            or "All rights not expressly granted above are reserved." not in resource_text
+            or "GNU LESSER GENERAL PUBLIC LICENSE" in resource_text
+        ):
+            fail(
+                f"{resource.relative_to(root)} must contain an internal-use notice "
+                "without falsely licensing the core under LGPL."
+            )
 
     wrapper = root / "gradle/wrapper/gradle-wrapper.jar"
     wrapper_digest = hashlib.sha256(wrapper.read_bytes()).hexdigest()
@@ -246,6 +304,66 @@ def verify_required_files(root: Path, manifest: dict) -> None:
     apache_text = (root / "gradle/wrapper/LICENSE").read_text(encoding="utf-8")
     if "Apache License" not in apache_text or "Version 2.0" not in apache_text:
         fail("The Gradle wrapper Apache License 2.0 text is incomplete.")
+
+
+def verify_publication_routes(root: Path) -> None:
+    for module in ("api", "ffmpeg"):
+        build = (root / module / "build.gradle.kts").read_text(encoding="utf-8")
+        forbidden = [
+            route
+            for route in ("githubPagesMavenRepository", "publishToMavenCentral()")
+            if route in build
+        ]
+        if forbidden:
+            fail(
+                f"{module} must not define public publication routes: "
+                + ", ".join(forbidden)
+            )
+        for required in (
+            "privateMavenRepositoryUrl",
+            "privateMavenRepositoryUsername",
+            "privateMavenRepositoryPassword",
+            "LicenseRef-KMediaBridge-Internal",
+        ):
+            if required not in build:
+                fail(f"{module} private publication is missing {required}.")
+
+    runtime_build = (root / "ffmpeg-runtime-desktop/build.gradle.kts").read_text(
+        encoding="utf-8"
+    )
+    for required in (
+        "githubPagesMavenRepository",
+        "publishToMavenCentral()",
+        "LICENSES/LGPL-2.1-or-later.txt",
+    ):
+        if required not in runtime_build:
+            fail(f"The public LGPL runtime publication is missing {required}.")
+
+    release_workflow = (root / ".github/workflows/release.yml").read_text(
+        encoding="utf-8"
+    )
+    for forbidden in (
+        ":api:publishAllPublicationsToGithubPagesRepository",
+        ":ffmpeg:publishAllPublicationsToGithubPagesRepository",
+    ):
+        if forbidden in release_workflow:
+            fail(f"Release workflow exposes the proprietary core through {forbidden}.")
+    for required in (
+        ":api:publishAllPublicationsToPrivateCoreRepository",
+        ":ffmpeg:publishAllPublicationsToPrivateCoreRepository",
+        ":ffmpeg-runtime-desktop:publishAllPublicationsToGithubPagesRepository",
+    ):
+        if required not in release_workflow:
+            fail(f"Release workflow is missing the expected route {required}.")
+
+    central_workflow = (
+        root / ".github/workflows/publish-maven-central.yml"
+    ).read_text(encoding="utf-8")
+    if (
+        ":ffmpeg-runtime-desktop:publishAndReleaseToMavenCentral"
+        not in central_workflow
+    ):
+        fail("Maven Central publication must target only the LGPL runtime project.")
 
 
 def main() -> int:
@@ -260,11 +378,15 @@ def main() -> int:
         verify_subtitle_manifest(root)
         verify_payload_boundary(root, manifest)
         verify_required_files(root, manifest)
+        verify_publication_routes(root)
     except AssertionError as error:
         print(f"compliance error: {error}", file=sys.stderr)
         return 1
 
-    print("Compliance gate passed: LGPL source boundary is complete; no native FFmpeg payload is distributed.")
+    print(
+        "Compliance gate passed: the internal Kotlin core and LGPL native/runtime "
+        "boundaries are explicit and complete."
+    )
     return 0
 
 
