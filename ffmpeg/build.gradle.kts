@@ -23,6 +23,10 @@ kotlin {
             jvmTarget.set(JvmTarget.JVM_17)
         }
         withHostTest {}
+        optimization {
+            consumerKeepRules.file("consumer-rules.pro")
+            consumerKeepRules.publish = true
+        }
     }
 
     jvm {
@@ -45,18 +49,28 @@ kotlin {
         nodejs()
     }
 
+    applyDefaultHierarchyTemplate()
+
     sourceSets {
         commonMain.dependencies {
             api(project(":api"))
             api(libs.kotlinx.coroutines.core)
         }
+        val jvmAndroidMain =
+            create("jvmAndroidMain") {
+                dependsOn(commonMain.get())
+                dependencies {
+                    implementation(libs.kotlinx.serialization.json)
+                }
+            }
+        androidMain.get().dependsOn(jvmAndroidMain)
+        jvmMain.get().dependsOn(jvmAndroidMain)
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
         }
         jvmMain.dependencies {
             implementation(libs.jna)
-            implementation(libs.kotlinx.serialization.json)
         }
         jvmTest.dependencies {
             runtimeOnly(project(":ffmpeg-runtime-desktop"))

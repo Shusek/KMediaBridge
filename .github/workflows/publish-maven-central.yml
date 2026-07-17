@@ -13,6 +13,9 @@ on:
 permissions:
   contents: read
 
+env:
+  ANDROID_RUNTIME_ABIS: arm64-v8a,armeabi-v7a,x86_64
+
 jobs:
   central:
     name: Publish signed artifacts
@@ -29,6 +32,8 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: gradle
+      - name: Install the Android platform used by the runtime AAR
+        run: sdkmanager "platforms;android-37"
       - name: Validate requested version
         shell: bash
         run: |
@@ -37,6 +42,10 @@ jobs:
             exit 1
           fi
           test "$(git tag --points-at HEAD)" = "v${{ inputs.version }}"
+      - name: Record the immutable build recipe revision
+        id: revision
+        shell: bash
+        run: echo "value=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Download the already released native resources
         shell: bash
         run: |
@@ -48,11 +57,24 @@ jobs:
             "https://github.com/${GITHUB_REPOSITORY}/releases/download/v${{ inputs.version }}/kmedia-bridge-${{ inputs.version }}-native-resources.tar.gz"
           tar -xzf "$RUNNER_TEMP/kmedia-bridge-${{ inputs.version }}-native-resources.tar.gz" \
             -C "$RUNNER_TEMP/native-resources"
+      - name: Download the already released Android native payload
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/android-dist"
+          archive="$RUNNER_TEMP/kmedia-bridge-${{ inputs.version }}-android-native-payload.tar.gz"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --retry 3 --retry-all-errors \
+            --output "$archive" \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/v${{ inputs.version }}/kmedia-bridge-${{ inputs.version }}-android-native-payload.tar.gz"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/android-dist"
       - name: Run release gates
         run: >-
           ./gradlew --no-daemon check complianceCheck
           -PpublicationVersion=${{ inputs.version }}
-          -PnativePayloadDirectory="$RUNNER_TEMP/native-resources"
+          -PdesktopNativePayloadDirectory="$RUNNER_TEMP/native-resources"
+          -PandroidNativePayloadDirectory="$RUNNER_TEMP/android-dist"
+          -PandroidRuntimeAbis="$ANDROID_RUNTIME_ABIS"
+          -PbuildRecipeRevision="${{ steps.revision.outputs.value }}"
       - name: Publish all artifacts and release through Central Portal
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
@@ -63,4 +85,7 @@ jobs:
           ./gradlew --no-daemon --no-configuration-cache
           publishAndReleaseToMavenCentral
           -PpublicationVersion=${{ inputs.version }}
-          -PnativePayloadDirectory="$RUNNER_TEMP/native-resources"
+          -PdesktopNativePayloadDirectory="$RUNNER_TEMP/native-resources"
+          -PandroidNativePayloadDirectory="$RUNNER_TEMP/android-dist"
+          -PandroidRuntimeAbis="$ANDROID_RUNTIME_ABIS"
+          -PbuildRecipeRevision="${{ steps.revision.outputs.value }}"

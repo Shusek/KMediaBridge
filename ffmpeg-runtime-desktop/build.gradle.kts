@@ -10,7 +10,10 @@ java {
     withSourcesJar()
 }
 
-val nativePayloadDirectory = providers.gradleProperty("nativePayloadDirectory")
+val nativePayloadDirectory =
+    providers
+        .gradleProperty("desktopNativePayloadDirectory")
+        .orElse(providers.gradleProperty("nativePayloadDirectory"))
 
 sourceSets {
     main {
@@ -21,6 +24,13 @@ sourceSets {
 tasks.withType<Jar>().configureEach {
     isPreserveFileTimestamps = false
     isReproducibleFileOrder = true
+}
+
+tasks.named<Jar>("sourcesJar") {
+    // The runtime payload is a main resource, not source material. Gradle's
+    // sources JAR otherwise inherits it through SourceSet.allSource and would
+    // publish a second, misleading copy of every native library.
+    exclude("META-INF/kmediabridge/native/**")
 }
 
 tasks.named<ProcessResources>("processResources") {

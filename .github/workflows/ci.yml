@@ -16,6 +16,10 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  ANDROID_NDK_VERSION: 29.0.14206865
+  ANDROID_CI_ABIS: arm64-v8a
+
 jobs:
   kotlin:
     name: Kotlin (${{ matrix.os }})
@@ -71,8 +75,10 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: gradle
+      - name: Install the Android platform used by the runtime AAR
+        run: sdkmanager "platforms;android-37"
       - name: Verify staged Maven publications
-        run: ./gradlew --no-daemon complianceCheck -PpublicationVersion=0.4.0-CI
+        run: ./gradlew --no-daemon complianceCheck -PpublicationVersion=0.4.2-CI
 
   native-lgpl:
     name: Native LGPL runtime (${{ matrix.platform }})
@@ -145,7 +151,7 @@ jobs:
           --dist "$RUNNER_TEMP/native-dist"
           --platform "${{ matrix.platform }}"
           --resources "$RUNNER_TEMP/native-resources"
-          --release-version 0.4.0-CI
+          --release-version 0.4.2-CI
           --revision "${{ github.sha }}"
       - name: Set up Java for the JVM integration test
         if: matrix.runnable
@@ -159,3 +165,55 @@ jobs:
         run: >-
           ./gradlew --no-daemon :ffmpeg:jvmTest
           -PnativePayloadDirectory="$RUNNER_TEMP/native-resources"
+
+  native-android:
+    name: Native LGPL runtime (Android arm64)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Set up Java
+        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: Install native verification tools and the pinned Android NDK
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes gnupg
+          sdkmanager "platforms;android-37" "ndk;$ANDROID_NDK_VERSION"
+      - name: Verify the signed FFmpeg source release
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/android-work"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$RUNNER_TEMP/android-work/ffmpeg-8.1.2.tar.xz" \
+            https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$RUNNER_TEMP/ffmpeg-8.1.2.tar.xz.asc" \
+            https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz.asc
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$RUNNER_TEMP/ffmpeg-devel.asc" \
+            https://ffmpeg.org/ffmpeg-devel.asc
+          ./scripts/verify_ffmpeg_release.sh \
+            "$RUNNER_TEMP/android-work/ffmpeg-8.1.2.tar.xz" \
+            "$RUNNER_TEMP/ffmpeg-8.1.2.tar.xz.asc" \
+            "$RUNNER_TEMP/ffmpeg-devel.asc"
+      - name: Build and inspect the Android runtime
+        shell: bash
+        run: >-
+          ./native/build-ffmpeg-android.sh
+          "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
+          "$RUNNER_TEMP/android-work"
+          "$RUNNER_TEMP/android-dist"
+          "$ANDROID_CI_ABIS"
+          "$RUNNER_TEMP/android-work/ffmpeg-8.1.2.tar.xz"
+      - name: Verify the native Android Maven publication
+        run: >-
+          ./gradlew --no-daemon complianceCheck
+          -PpublicationVersion=0.4.2-CI
+          -PandroidNativePayloadDirectory="$RUNNER_TEMP/android-dist"
+          -PandroidRuntimeAbis="$ANDROID_CI_ABIS"
+          -PbuildRecipeRevision="${{ github.sha }}"

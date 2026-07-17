@@ -162,6 +162,7 @@ def main() -> int:
             "kmb_probe_json",
             "kmb_remux_fragmented_mp4_stream",
             "kmb_burn_subtitles_fragmented_mp4_stream",
+            "kmb_tone_map_hdr_to_sdr_fragmented_mp4_stream",
         )
         if not all(symbol in exports for symbol in required_exports):
             print("runtime inspection error: required C ABI exports are missing", file=sys.stderr)
@@ -171,7 +172,10 @@ def main() -> int:
             "",
         )
         license_match = re.search(r"LGPL version [^\r\n]+", dll_text)
-        feature_match = re.search(r'\{"subtitleBurnIn":(?:true|false)\}', dll_text)
+        feature_match = re.search(
+            r'\{"subtitleBurnIn":(?:true|false),"hdrToSdrToneMap":(?:true|false)\}',
+            dll_text,
+        )
         if feature_match is None:
             print("runtime inspection error: native feature declaration is absent from PE payload", file=sys.stderr)
             return 1
@@ -232,6 +236,7 @@ def main() -> int:
             "SUBTITLE_BURN_IN_SDR" if runtime_features.get("subtitleBurnIn") else "REMUX_ONLY"
         ),
         "canBurnSubtitles": bool(runtime_features.get("subtitleBurnIn")),
+        "canToneMapToSdr": bool(runtime_features.get("hdrToSdrToneMap")),
     }
     arguments.output.parent.mkdir(parents=True, exist_ok=True)
     arguments.output.write_text(json.dumps(inspection, indent=2, sort_keys=True) + "\n", encoding="utf-8")

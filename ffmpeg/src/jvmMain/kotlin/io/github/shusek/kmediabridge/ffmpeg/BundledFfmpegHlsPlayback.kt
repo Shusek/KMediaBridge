@@ -44,11 +44,21 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.ceil
 import kotlin.time.Duration.Companion.seconds
 
+/** Desired dynamic-range result for the bounded desktop HLS adapter. */
+public enum class FfmpegHlsVideoOutputPolicy {
+    /** Preserve compressed video samples and their verified color signal. */
+    PRESERVE_SOURCE,
+
+    /** Keep confirmed SDR unchanged; tone-map only explicit HDR10, HDR10+, or HLG input to SDR. */
+    FORCE_SDR,
+}
+
 public data class FfmpegHlsPlaybackRequest(
     public val input: MediaInput,
     public val selectedVideoTrackId: Int? = null,
     public val selectedAudioTrackId: Int? = null,
     public val selectedSubtitleTrackId: Int? = null,
+    public val videoOutputPolicy: FfmpegHlsVideoOutputPolicy = FfmpegHlsVideoOutputPolicy.PRESERVE_SOURCE,
     public val startTimeUs: Long = 0L,
     public val fragmentDurationUs: Long = 4_000_000L,
     public val maxBufferedFragments: Int = 12,
@@ -95,17 +105,13 @@ public object BundledFfmpegHlsPlaybackBackend {
         driver: BundledFfmpegNativeDriver = BundledFfmpegNativeDriver.loadDefault(),
     ): BundledFfmpegHlsPlaybackSession {
         val probe = driver.probe(request.input)
+        val videoHandling = request.resolveVideoHandling(probe)
         val bridgeSession =
             driver.open(
                 request.input,
                 BridgeRequest(
                     output = BridgeOutput.CMAF_FRAGMENT_STREAM,
-                    videoHandling =
-                        if (request.selectedSubtitleTrackId == null) {
-                            VideoHandling.COPY
-                        } else {
-                            VideoHandling.TRANSCODE_TO_SDR
-                        },
+                    videoHandling = videoHandling,
                     audioHandling = AudioHandling.COPY,
                     subtitleHandling =
                         if (request.selectedSubtitleTrackId == null) {
@@ -143,6 +149,25 @@ public object BundledFfmpegHlsPlaybackBackend {
             origin.closeAsync()
             throw error
         }
+    }
+}
+
+internal fun FfmpegHlsPlaybackRequest.resolveVideoHandling(probe: MediaProbe): VideoHandling {
+    if (selectedSubtitleTrackId != null) return VideoHandling.TRANSCODE_TO_SDR
+    if (videoOutputPolicy == FfmpegHlsVideoOutputPolicy.PRESERVE_SOURCE) return VideoHandling.COPY
+
+    val video =
+        selectedVideoTrackId
+            ?.let { selected -> probe.tracks.filterIsInstance<VideoTrackInfo>().firstOrNull { it.id == selected } }
+            ?: probe.tracks.filterIsInstance<VideoTrackInfo>().firstOrNull()
+            ?: return VideoHandling.TONE_MAP_TO_SDR
+    return if (
+        video.colorInfo.dynamicRange == DynamicRangeFormat.SDR &&
+        video.colorInfo.dolbyVision == null
+    ) {
+        VideoHandling.COPY
+    } else {
+        VideoHandling.TONE_MAP_TO_SDR
     }
 }
 

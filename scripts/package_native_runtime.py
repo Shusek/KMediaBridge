@@ -91,7 +91,11 @@ def main() -> int:
     library_directory = dist / "lib"
     dependencies = [path for path in library_directory.iterdir() if dependency_pattern.fullmatch(path.name)]
     bridge_candidates = [path for path in library_directory.iterdir() if bridge_pattern.fullmatch(path.name)]
-    expected_dependency_count = 5 if inspection["canBurnSubtitles"] else 3
+    expected_dependency_count = 3
+    if inspection["canBurnSubtitles"]:
+        expected_dependency_count += 1
+    if inspection["canBurnSubtitles"] or inspection.get("canToneMapToSdr"):
+        expected_dependency_count += 1
     if len(dependencies) != expected_dependency_count or len(bridge_candidates) != 1:
         raise ValueError(
             f"Expected {expected_dependency_count} FFmpeg libraries and one bridge; "
@@ -147,12 +151,15 @@ def main() -> int:
         property_line("capability.outputs", "CMAF_FRAGMENT_STREAM"),
         property_line("capability.canProbe", "true"),
         property_line("capability.canCopyVideo", "true"),
-        property_line("capability.canToneMapToSdr", "false"),
+        property_line("capability.canToneMapToSdr", str(bool(inspection.get("canToneMapToSdr"))).lower()),
         property_line("capability.canConvertDolbyVisionProfile7", "false"),
         property_line("capability.supportsLiveInput", "false"),
         property_line("capability.supportsEncryptedInput", "false"),
         property_line("capability.supportsRemoteInput", "false"),
-        property_line("capability.canTranscodeVideo", str(inspection["canBurnSubtitles"]).lower()),
+        property_line(
+            "capability.canTranscodeVideo",
+            str(inspection["canBurnSubtitles"] or inspection.get("canToneMapToSdr", False)).lower(),
+        ),
         property_line("capability.canTranscodeAudio", "false"),
         property_line("capability.canBurnSubtitles", str(inspection["canBurnSubtitles"]).lower()),
         property_line("component.count", len(linked_components)),

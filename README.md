@@ -5,20 +5,23 @@ core is internal-use, while its separately replaceable bundled FFmpeg runtime
 remains LGPL-2.1-or-later. It probes local media and losslessly remuxes
 Matroska/WebM, MP4/fMP4, and MPEG-TS into a streamed fragmented-MP4/CMAF
 output. The macOS desktop flavor can additionally decode SDR video, compose a
-selected text subtitle track with libass, and encode tagged BT.709 CMAF through
-VideoToolbox.
+selected text subtitle track with libass, or decode explicit
+HDR10/HDR10+/HLG, apply the
+controlled HDR-to-SDR transform, and encode tagged BT.709 CMAF through
+VideoToolbox. The Android runtime exposes the same strict HDR-to-SDR operation
+through MediaCodec.
 
 There is no `ffmpeg`/`ffprobe` process and no system FFmpeg prerequisite. The
-desktop artifact contains dynamically linked native libraries built from the
+runtime artifacts contain dynamically linked native libraries built from the
 pinned FFmpeg source with GPL and nonfree components disabled.
 
 ## Artifacts
 
 Starting with 0.4.0, the Kotlin API and backend are internal-use artifacts.
-All three coordinates are publicly available from Maven Central. Public
+All four coordinates are publicly available from Maven Central. Public
 availability does not grant rights beyond the license identified by each
-artifact: the API and backend remain internal-use, while the independently
-replaceable native runtime remains LGPL:
+artifact: the API and backend remain internal-use, while both independently
+replaceable native runtimes remain LGPL:
 
 ```kotlin
 dependencyResolutionManagement {
@@ -30,18 +33,22 @@ dependencyResolutionManagement {
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("io.github.shusek:kmedia-bridge-api:0.4.1")
-            implementation("io.github.shusek:kmedia-bridge-ffmpeg:0.4.1")
+            implementation("io.github.shusek:kmedia-bridge-api:0.4.2")
+            implementation("io.github.shusek:kmedia-bridge-ffmpeg:0.4.2")
         }
         jvmMain.dependencies {
             // Optional and intentionally separate from the API.
-            runtimeOnly("io.github.shusek:kmedia-bridge-ffmpeg-runtime-desktop:0.4.1")
+            runtimeOnly("io.github.shusek:kmedia-bridge-ffmpeg-runtime-desktop:0.4.2")
+        }
+        androidMain.dependencies {
+            // Optional ABI-specific runtime, separate from the Kotlin API.
+            runtimeOnly("io.github.shusek:kmedia-bridge-ffmpeg-runtime-android:0.4.2")
         }
     }
 }
 ```
 
-The LGPL runtime is additionally mirrored to
+The LGPL runtimes are additionally mirrored to
 `https://shusek.github.io/KMediaBridge/maven` together with historical 0.3.0
 artifacts. Consumers of current releases need only `mavenCentral()`.
 
@@ -50,11 +57,20 @@ artifacts. Consumers of current releases need only `mavenCentral()`.
   loader, compliance checks, typed probe parser, and CMAF fragment stream.
 - `kmedia-bridge-ffmpeg-runtime-desktop` contains FFmpeg 8.1.2 and the C bridge
   for macOS arm64/x64, Linux x64, and Windows x64.
+- `kmedia-bridge-ffmpeg-runtime-android` contains the reviewed, ABI-specific
+  dynamically linked FFmpeg/MediaCodec payload and its compliance manifest.
 
 Create the desktop backend with:
 
 ```kotlin
 val driver = BundledFfmpegNativeDriver.load()
+val bridge = FfmpegMediaBridge.create(driver)
+```
+
+On Android, select and verify the optional runtime before opening media:
+
+```kotlin
+val driver = AndroidFfmpegNativeDriver.load()
 val bridge = FfmpegMediaBridge.create(driver)
 ```
 
@@ -99,6 +115,7 @@ val playback = BundledFfmpegHlsPlaybackBackend.start(
     FfmpegHlsPlaybackRequest(
         input = MediaInput("/media/movie.mkv", MediaInputKind.FILE),
         selectedAudioTrackId = 2,
+        videoOutputPolicy = FfmpegHlsVideoOutputPolicy.FORCE_SDR,
         // Optional on a subtitle-capable runtime; text is rendered into SDR video.
         selectedSubtitleTrackId = 3,
     ),
@@ -109,7 +126,9 @@ playback.close()
 ```
 
 `playback.source.outputInfo` reports the selected tracks and the requested
-video/audio/subtitle handling. `copiedHdrSignal` reports only that a strict
+video/audio/subtitle handling. `FORCE_SDR` leaves confirmed SDR compressed
+samples unchanged and selects the strict tone mapper for HDR10/HDR10+/HLG;
+Dolby Vision and ambiguous color descriptions fail closed. `copiedHdrSignal` reports only that a strict
 HEVC Main 10 HDR10/HDR10+/HLG signal was copied into CMAF; it deliberately does
 not claim that a decoder, surface, display, or physical output is HDR.
 
@@ -130,21 +149,26 @@ runtime-only Pages repository.
 - streams fMP4 through a native callback with backpressure;
 - serves that stream as bounded-memory CMAF/HLS on loopback for JVM players;
 - copies compatible compressed video/audio without re-encoding the picture;
+- reconstructs monotonic decode timestamps when a Matroska stream carries reordered presentation
+  timestamps without DTS;
 - restarts from a preceding keyframe after seek;
 - preserves codec color and HDR metadata that FFmpeg can carry through this
-  remux path.
+  remux path;
+- on supported runtimes, tone-maps explicitly tagged PQ/HLG BT.2020 input to
+  limited-range 8-bit BT.709 and reports `TONE_MAP_TO_SDR` rather than sample copy;
 - on macOS, optionally burns selected ASS/SSA/SRT/WebVTT/mov_text into an SDR
   BT.709 AVC output using libass plus VideoToolbox.
 
-It does not burn bitmap subtitles, compose subtitles into HDR/HLG/Dolby Vision,
-tone-map, transcode audio, convert Dolby Vision profile 7, handle
-remote/DRM/live input, or certify Dolby Vision. HDR subtitle requests are
-rejected rather than silently flattened or mislabeled. Linux and Windows keep
-the remux-only flavor until their reviewed native encoders are enabled.
+It does not burn bitmap subtitles, compose subtitles into HDR/HLG/Dolby
+Vision, tone-map Dolby Vision or ambiguous color signals, transcode audio,
+convert Dolby Vision profile 7, handle remote/DRM/live input, or certify Dolby
+Vision. HDR subtitle requests are rejected rather than silently flattened or
+mislabeled. Linux and Windows keep the remux-only flavor until their reviewed
+native encoders are enabled.
 KMediaPlayer still chooses and confirms the actual AVFoundation/Media
-Foundation/GStreamer/rendering path after receiving the fMP4 stream. Android
-and Apple Kotlin/Native payloads remain separate future artifacts; the bundled
-runtime described here is for desktop JVM.
+Foundation/GStreamer/rendering path after receiving the fMP4 stream. The Android
+runtime is a separate optional artifact; Apple Kotlin/Native payloads remain
+separate future artifacts.
 
 The FFmpeg dylib/SONAME/DLL names use a private `-kmb` suffix. Native loading is
 local rather than process-global; Darwin additionally uses first-image symbol

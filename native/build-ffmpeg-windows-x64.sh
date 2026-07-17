@@ -81,6 +81,16 @@ configure_arguments=(
 
 "${cross_prefix}gcc" \
     -std=c11 \
+    -Wall \
+    -Wextra \
+    -Werror \
+    -I "$root_dir/native/src" \
+    -I "$prefix_dir/include" \
+    -c "$root_dir/native/tests/kmedia_bridge_timestamps_test.c" \
+    -o "$work_dir/kmedia_bridge_timestamps_test.o"
+
+"${cross_prefix}gcc" \
+    -std=c11 \
     -O2 \
     -Wall \
     -Wextra \
@@ -91,6 +101,7 @@ configure_arguments=(
     -shared \
     "$root_dir/native/src/kmedia_bridge.c" \
     "$root_dir/native/src/kmedia_bridge_subtitles.c" \
+    "$root_dir/native/src/kmedia_bridge_tonemap.c" \
     -L "$prefix_dir/lib" \
     -Wl,--no-undefined \
     -Wl,--out-implib,"$output_dir/lib/libkmediabridge.dll.a" \
@@ -136,6 +147,13 @@ cp "$root_dir/native/build-subtitle-deps-unix.sh" "$output_dir/compliance/kmedia
 cp "$root_dir/native/include/kmedia_bridge.h" "$output_dir/compliance/kmediabridge-source/native/include/kmedia_bridge.h"
 cp "$root_dir/native/src/kmedia_bridge.c" "$output_dir/compliance/kmediabridge-source/native/src/kmedia_bridge.c"
 cp "$root_dir/native/src/kmedia_bridge_subtitles.c" "$output_dir/compliance/kmediabridge-source/native/src/kmedia_bridge_subtitles.c"
+cp "$root_dir/native/src/kmedia_bridge_tonemap.c" "$output_dir/compliance/kmediabridge-source/native/src/kmedia_bridge_tonemap.c"
+cp "$root_dir/native/src/kmedia_bridge_hdr_math.c" "$output_dir/compliance/kmediabridge-source/native/src/kmedia_bridge_hdr_math.c"
+cp "$root_dir/native/src/kmedia_bridge_hdr_math.h" "$output_dir/compliance/kmediabridge-source/native/src/kmedia_bridge_hdr_math.h"
+cp "$root_dir/native/src/kmedia_bridge_timestamps.h" "$output_dir/compliance/kmediabridge-source/native/src/kmedia_bridge_timestamps.h"
+mkdir -p "$output_dir/compliance/kmediabridge-source/native/tests"
+cp "$root_dir/native/tests/kmedia_bridge_timestamps_test.c" "$output_dir/compliance/kmediabridge-source/native/tests/kmedia_bridge_timestamps_test.c"
+cp "$root_dir/native/tests/kmedia_bridge_hdr_math_test.c" "$output_dir/compliance/kmediabridge-source/native/tests/kmedia_bridge_hdr_math_test.c"
 cp "$root_dir/scripts/generate_native_checksums.py" "$output_dir/compliance/kmediabridge-source/scripts/generate_native_checksums.py"
 cp "$root_dir/scripts/inspect_native_runtime.py" "$output_dir/compliance/kmediabridge-source/scripts/inspect_native_runtime.py"
 cp "$root_dir/scripts/package_native_runtime.py" "$output_dir/compliance/kmediabridge-source/scripts/package_native_runtime.py"
@@ -143,7 +161,11 @@ cp "$root_dir/scripts/assemble_runtime_manifest.py" "$output_dir/compliance/kmed
 cp "$root_dir/scripts/verify_ffmpeg_release.sh" "$output_dir/compliance/kmediabridge-source/scripts/verify_ffmpeg_release.sh"
 
 "${cross_prefix}gcc" --version > "$output_dir/compliance/compiler-version.txt"
-if ! git -C "$root_dir" rev-parse --verify HEAD > "$output_dir/compliance/build-recipe-revision.txt" 2>/dev/null; then
+if git -C "$root_dir" rev-parse --verify HEAD >/dev/null 2>&1 &&
+    git -C "$root_dir" diff-index --quiet HEAD -- &&
+    [[ -z "$(git -C "$root_dir" ls-files --others --exclude-standard)" ]]; then
+    git -C "$root_dir" rev-parse HEAD > "$output_dir/compliance/build-recipe-revision.txt"
+else
     printf '%s\n' "uncommitted-source" > "$output_dir/compliance/build-recipe-revision.txt"
 fi
 

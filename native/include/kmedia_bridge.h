@@ -86,6 +86,25 @@ KMB_EXPORT KmbResult kmb_burn_subtitles_fragmented_mp4_stream(
     char **output_error
 );
 
+/*
+ * Decodes a PQ or HLG BT.2020 video track, applies the controlled KMediaBridge
+ * HDR-to-SDR color transform, encodes explicitly tagged limited-range BT.709
+ * AVC, and streams fragmented MP4. The optional runtime feature is advertised
+ * as hdrToSdrToneMap by kmb_runtime_features_json(). Dolby Vision, encrypted or
+ * live inputs, and ambiguous color signals must be rejected by the caller or
+ * return KMB_UNSUPPORTED here.
+ */
+KMB_EXPORT KmbResult kmb_tone_map_hdr_to_sdr_fragmented_mp4_stream(
+    const char *input_locator,
+    int64_t fragment_duration_us,
+    int64_t start_time_us,
+    int32_t preferred_video_track_id,
+    int32_t preferred_audio_track_id,
+    KmbWriteCallback write_callback,
+    void *opaque,
+    char **output_error
+);
+
 KMB_EXPORT void kmb_free_string(char *value);
 
 #ifdef __cplusplus

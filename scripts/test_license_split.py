@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import io
 import tempfile
 import unittest
 import zipfile
@@ -68,6 +69,34 @@ def write_jar(repository: Path, artifact_id: str, entries: dict[str, str]) -> Pa
     return archive
 
 
+def write_android_aar(repository: Path) -> Path:
+    artifact_id = verify_publications.ANDROID_RUNTIME_ARTIFACT
+    directory = repository / GROUP_PATH / artifact_id / VERSION
+    directory.mkdir(parents=True, exist_ok=True)
+    classes_buffer = io.BytesIO()
+    with zipfile.ZipFile(classes_buffer, "w") as classes:
+        classes.writestr(
+            verify_publications.ANDROID_RUNTIME_MANIFEST,
+            "schemaVersion=1\navailable=false\n",
+        )
+        classes.writestr(
+            verify_publications.ANDROID_RUNTIME_LICENSE,
+            "GNU LESSER GENERAL PUBLIC LICENSE\nVersion 2.1\n",
+        )
+        classes.writestr(
+            verify_publications.ANDROID_RUNTIME_NOTICE,
+            "Runtime notice\n",
+        )
+        classes.writestr(
+            verify_publications.ANDROID_RUNTIME_RELINKING,
+            "Relinking instructions\n",
+        )
+    archive = directory / f"{artifact_id}-{VERSION}.aar"
+    with zipfile.ZipFile(archive, "w") as aar:
+        aar.writestr("classes.jar", classes_buffer.getvalue())
+    return archive
+
+
 class LicenseSplitTest(unittest.TestCase):
     def stage_repositories(self, directory: Path) -> tuple[Path, Path]:
         internal_core = directory / "internal-core"
@@ -98,13 +127,13 @@ class LicenseSplitTest(unittest.TestCase):
 
         write_pom(
             runtime,
-            verify_publications.RUNTIME_ARTIFACT,
+            verify_publications.DESKTOP_RUNTIME_ARTIFACT,
             verify_publications.LGPL_LICENSE_NAME,
             verify_publications.LGPL_LICENSE_URL,
         )
         write_jar(
             runtime,
-            verify_publications.RUNTIME_ARTIFACT,
+            verify_publications.DESKTOP_RUNTIME_ARTIFACT,
             {
                 "META-INF/LICENSE": (
                     "GNU LESSER GENERAL PUBLIC LICENSE\nVersion 2.1\n"
@@ -114,6 +143,13 @@ class LicenseSplitTest(unittest.TestCase):
                 "META-INF/kmediabridge/RELINKING.md": "Relinking instructions\n",
             },
         )
+        write_pom(
+            runtime,
+            verify_publications.ANDROID_RUNTIME_ARTIFACT,
+            verify_publications.LGPL_LICENSE_NAME,
+            verify_publications.LGPL_LICENSE_URL,
+        )
+        write_android_aar(runtime)
         return internal_core, runtime
 
     def test_accepts_internal_core_and_lgpl_runtime(self) -> None:
@@ -132,8 +168,8 @@ class LicenseSplitTest(unittest.TestCase):
 
         self.assertEqual(len(internal_poms), 2)
         self.assertEqual(
-            [pom.artifact_id for pom in runtime_poms],
-            [verify_publications.RUNTIME_ARTIFACT],
+            {pom.artifact_id for pom in runtime_poms},
+            verify_publications.RUNTIME_ARTIFACTS,
         )
 
     def test_rejects_core_in_runtime_repository(self) -> None:

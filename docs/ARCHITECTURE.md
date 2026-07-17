@@ -22,6 +22,12 @@ kmedia-bridge-ffmpeg-runtime-desktop (public LGPL runtimeOnly resources)
         +-- macOS arm64/x64 dylibs
         +-- Linux x64 shared objects
         +-- Windows x64 DLLs
+
+kmedia-bridge-ffmpeg-runtime-android (public LGPL runtimeOnly AAR)
+        |
+        +-- arm64-v8a shared objects
+        +-- armeabi-v7a shared objects
+        +-- x86_64 shared objects
 ```
 
 The Kotlin API is engine-neutral. FFmpeg types, pointers, command-line syntax,
@@ -36,7 +42,8 @@ and ABI details never appear in application-facing contracts.
   bridge, FFmpeg libraries, and a verified manifest. Arbitrary system libraries
   are not discovered or trusted implicitly.
 - The native runtime exposes a small versioned C ABI.
-- Desktop JVM calls that ABI through JNA; it never invokes a program.
+- Desktop JVM calls that ABI through JNA; Android calls it through a narrow JNI
+  adapter. Neither platform invokes a program.
 - Native libraries are dynamically linked to keep the LGPL replacement and
   relinking boundary explicit.
 - Input locators are never included in diagnostic strings because URLs may
@@ -56,7 +63,9 @@ and ABI details never appear in application-facing contracts.
   and encoded as AVC with VideoToolbox.
 - **Windows JVM:** bundled x64 `.dll`; Media Foundation remains the primary decoder
   and D3D renderer.
-- **Android:** Media3 remains primary; optional `.so` only for gaps.
+- **Android:** Media3 remains primary; the optional FFmpeg/MediaCodec runtime
+  probes and remuxes local containers or performs explicitly requested,
+  controlled HDR10/HDR10+/HLG-to-SDR conversion.
 - **iOS:** dynamic framework/XCFramework with Kotlin/Native interop.
 - **Linux JVM:** bundled x64 `.so`; system GStreamer remains the confirmed HDR
   display route and this bridge is an optional container fallback.
@@ -65,10 +74,12 @@ and ABI details never appear in application-facing contracts.
 ## Current native ABI
 
 ABI version 4 exposes runtime identity, an authenticated feature declaration, a
-typed probe JSON document (including audio and subtitle selection metadata), a
-file remux operation, a track-selecting callback-based fragmented-MP4 stream,
-and an optional SDR subtitle composition operation. The callback supports
-backpressure and cancellation. Remux-only builds never decode the picture;
-subtitle-capable macOS builds decode, compose in libass, normalize to limited
-BT.709, and encode AVC with VideoToolbox. PQ, HLG, BT.2020, Dolby Vision, and
-HDR10+ inputs are rejected by that SDR operation.
+typed probe JSON document (including audio, subtitle, color, HDR10+, and Dolby
+Vision metadata), a file remux operation, a track-selecting callback-based
+fragmented-MP4 stream, optional SDR subtitle composition, and controlled
+HDR-to-SDR conversion. The callback supports backpressure and cancellation.
+Remux-only builds never decode the picture. Subtitle-capable macOS builds
+decode, compose in libass, normalize to limited BT.709, and encode AVC with
+VideoToolbox. Android uses MediaCodec where available, runs the shared linear
+BT.2020 color transform, and emits tagged limited-range BT.709 AVC. Dolby
+Vision and ambiguous color signals fail closed.

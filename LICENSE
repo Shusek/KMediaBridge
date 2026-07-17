@@ -7,10 +7,11 @@ Starting with KMediaBridge 0.4.0, this repository is a mixed-license work:
 - `api/**` and the first-party Kotlin implementation in `ffmpeg/**` are
   licensed under the KMediaBridge Internal Use Notice and Limited License in
   `LICENSES/LicenseRef-KMediaBridge-Internal.txt`.
-- `native/**`, `ffmpeg-runtime-desktop/**`, `compliance/**`, `scripts/**`, and
-  the build and release material needed to rebuild, inspect, replace, and
-  redistribute the native runtime are licensed under LGPL-2.1-or-later. The
-  complete text is in `LICENSES/LGPL-2.1-or-later.txt`.
+- `native/**`, `ffmpeg-runtime-desktop/**`, `ffmpeg-runtime-android/**`,
+  `compliance/**`, `scripts/**`, and the build and release material needed to
+  rebuild, inspect, replace, and redistribute the native runtimes are licensed
+  under LGPL-2.1-or-later. The complete text is in
+  `LICENSES/LGPL-2.1-or-later.txt`.
 - Third-party components retain their own licenses. See
   `THIRD_PARTY_NOTICES.md` and the manifests in `compliance/**`.
 
