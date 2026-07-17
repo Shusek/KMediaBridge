@@ -75,6 +75,10 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: gradle
+      - name: Set up Android SDK command-line tools
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        with:
+          packages: ""
       - name: Install the Android platform used by the runtime AAR
         run: sdkmanager "platforms;android-37"
       - name: Verify staged Maven publications
@@ -178,6 +182,10 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: gradle
+      - name: Set up Android SDK command-line tools
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        with:
+          packages: ""
       - name: Install native verification tools and the pinned Android NDK
         shell: bash
         run: |
