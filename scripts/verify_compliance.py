@@ -108,6 +108,8 @@ def verify_public_text(root: Path) -> None:
             fail(f"release workflow omits local ARM attestation field: {field}")
     if 'github_cli="/c/Program Files/GitHub CLI/gh.exe"' not in release:
         fail("release workflow does not locate GitHub CLI inside the Windows MSYS2 job")
+    if 'runner_temp="$(cygpath -u "$RUNNER_TEMP")"' not in release or '--dir "$runner_temp/runtime"' not in release:
+        fail("release workflow does not normalize Windows paths before GNU tar access")
     build_marker = "- name: Build one bridge client against the exact SDK"
     upload_marker = "- uses: actions/upload-artifact@"
     if build_marker not in release or upload_marker not in release.split(build_marker, 1)[1]:

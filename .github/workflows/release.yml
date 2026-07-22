@@ -131,17 +131,21 @@ jobs:
           RUNTIME_VERSION: ${{ inputs.runtime_version }}
         run: |
           github_cli=gh
-          if [[ '${{ matrix.target }}' == windows-* ]]; then github_cli="/c/Program Files/GitHub CLI/gh.exe"; fi
+          runner_temp="$RUNNER_TEMP"
+          if [[ '${{ matrix.target }}' == windows-* ]]; then
+            github_cli="/c/Program Files/GitHub CLI/gh.exe"
+            runner_temp="$(cygpath -u "$RUNNER_TEMP")"
+          fi
           name="kmedia-ffmpeg-runtime-$RUNTIME_VERSION-${{ matrix.target }}-sdk.tar.gz"
-          mkdir "$RUNNER_TEMP/runtime"
+          mkdir "$runner_temp/runtime"
           "$github_cli" release download "v$RUNTIME_VERSION" -R Shusek/KMediaFfmpegRuntime \
-            --dir "$RUNNER_TEMP/runtime" --pattern "$name" --pattern SHA256SUMS
-          expected="$(awk -v p="$name" '$2 == p || $2 == "./" p {print $1}' "$RUNNER_TEMP/runtime/SHA256SUMS")"
+            --dir "$runner_temp/runtime" --pattern "$name" --pattern SHA256SUMS
+          expected="$(awk -v p="$name" '$2 == p || $2 == "./" p {print $1}' "$runner_temp/runtime/SHA256SUMS")"
           [[ "$expected" =~ ^[0-9a-f]{64}$ ]]
-          actual="$(python3 -c 'import hashlib,sys; h=hashlib.sha256(); f=open(sys.argv[1],"rb"); [h.update(b) for b in iter(lambda:f.read(1048576),b"")]; print(h.hexdigest())' "$RUNNER_TEMP/runtime/$name")"
+          actual="$(python3 -c 'import hashlib,sys; h=hashlib.sha256(); f=open(sys.argv[1],"rb"); [h.update(b) for b in iter(lambda:f.read(1048576),b"")]; print(h.hexdigest())' "$runner_temp/runtime/$name")"
           test "$actual" = "$expected"
-          tar -xzf "$RUNNER_TEMP/runtime/$name" -C "$RUNNER_TEMP/runtime"
-          test "$(cat "$RUNNER_TEMP/runtime/runtime-id.txt")" = '${{ inputs.tested_runtime_id }}'
+          tar -xzf "$runner_temp/runtime/$name" -C "$runner_temp/runtime"
+          test "$(cat "$runner_temp/runtime/runtime-id.txt")" = '${{ inputs.tested_runtime_id }}'
       - name: Build one bridge client against the exact SDK
         env:
           RUNTIME_VERSION: ${{ inputs.runtime_version }}
