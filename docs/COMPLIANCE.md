@@ -13,4 +13,8 @@ The release gate rejects:
 - dependency metadata that does not strictly pin the shared runtime;
 - a release lacking the local Android ARM test attestation.
 
+An RC may use KMediaFfmpegRuntime's path-free pure-ARMv7 native graph report
+when no API 28 ARMv7 device is available. This exception never permits x86 and
+does not satisfy the stable-release device, framework, or MediaCodec matrix.
+
 The API/backend retain `LicenseRef-KMediaBridge-Internal`; source files explicitly marked `LGPL-2.1-or-later` retain that license. See the root license map and `LICENSES/` for exact terms.

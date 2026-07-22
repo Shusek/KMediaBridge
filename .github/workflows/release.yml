@@ -27,6 +27,11 @@ on:
         required: true
         default: false
         type: boolean
+      android_armv7_native_graph_verified:
+        description: RC only - confirm the pure-ARMv7 shared native graph passed
+        required: true
+        default: false
+        type: boolean
       runtime_report_sha256:
         description: SHA-256 of the retained path-free runtime report
         required: true
@@ -51,6 +56,7 @@ jobs:
       TESTED_COMMIT: ${{ inputs.tested_commit }}
       TESTED_RUNTIME_ID: ${{ inputs.tested_runtime_id }}
       ARM_MATRIX: ${{ inputs.android_arm_matrix_verified }}
+      ARMV7_NATIVE_GRAPH: ${{ inputs.android_armv7_native_graph_verified }}
       REPORT_SHA256: ${{ inputs.runtime_report_sha256 }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -60,8 +66,12 @@ jobs:
       - id: identity
         run: |
           test "$GITHUB_REF" = refs/heads/main
-          test "$ARM_MATRIX" = true
           [[ "$VERSION" =~ ^0\.5\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]
+          if [[ "$VERSION" == *-rc.* ]]; then
+            test "$ARM_MATRIX" = true || test "$ARMV7_NATIVE_GRAPH" = true
+          else
+            test "$ARM_MATRIX" = true
+          fi
           test "$RUNTIME_VERSION" = 0.1.0-rc.1
           revision="$(git rev-parse HEAD)"
           test "$revision" = "$TESTED_COMMIT"
