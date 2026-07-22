@@ -106,6 +106,8 @@ def verify_public_text(root: Path) -> None:
     for field in ("android_arm_matrix_verified", "tested_commit", "tested_runtime_id", "runtime_report_sha256"):
         if field not in release:
             fail(f"release workflow omits local ARM attestation field: {field}")
+    if 'github_cli="/c/Program Files/GitHub CLI/gh.exe"' not in release:
+        fail("release workflow does not locate GitHub CLI inside the Windows MSYS2 job")
     build_marker = "- name: Build one bridge client against the exact SDK"
     upload_marker = "- uses: actions/upload-artifact@"
     if build_marker not in release or upload_marker not in release.split(build_marker, 1)[1]:
