@@ -47,6 +47,8 @@ jobs:
           [[ "$expected" =~ ^[0-9a-f]{64}$ ]]
           test "$expected" = "$(sha256sum "$RUNNER_TEMP/release/$name" | awk '{print $1}')"
           tar -xzf "$RUNNER_TEMP/release/$name" -C "$RUNNER_TEMP/staging" --strip-components=1
+          python3 scripts/build_central_bundle.py --normalize \
+            --staging "$RUNNER_TEMP/staging" --version "$VERSION"
       - name: Sign staged artifacts
         env:
           MAVEN_SIGNING_KEY: ${{ secrets.MAVEN_SIGNING_KEY }}

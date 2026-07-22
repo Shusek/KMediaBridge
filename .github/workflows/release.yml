@@ -229,7 +229,8 @@ jobs:
             :ffmpeg:publishAllPublicationsToReleaseRepository \
             :ffmpeg-runtime-android:publishAllPublicationsToReleaseRepository \
             :ffmpeg-runtime-desktop:publishAllPublicationsToReleaseRepository
-          find "$RUNNER_TEMP/maven" -name maven-metadata.xml -delete
+          python3 scripts/build_central_bundle.py --normalize \
+            --staging "$RUNNER_TEMP/maven" --version "$VERSION"
           python3 - "$RUNNER_TEMP/maven" "$VERSION" "$RUNTIME_VERSION" <<'PY'
           import pathlib, sys, xml.etree.ElementTree as ET
           root, version, runtime = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]

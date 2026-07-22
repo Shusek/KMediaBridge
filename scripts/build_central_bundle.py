@@ -13,6 +13,7 @@ from pathlib import Path
 
 SEMVER = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?")
 ROOT_ARTIFACTS = {"kmedia-bridge-api", "kmedia-bridge-ffmpeg", "kmedia-bridge-client-android", "kmedia-bridge-client-desktop"}
+GENERATED_CHECKSUM_SUFFIXES = (".md5", ".sha1", ".sha256", ".sha512")
 
 
 def digest(path: Path, algorithm: str) -> str:
@@ -23,18 +24,68 @@ def digest(path: Path, algorithm: str) -> str:
     return value.hexdigest()
 
 
+def normalize_staging(staging: Path, version: str) -> None:
+    """Remove only Gradle repository metadata and generated checksum sidecars."""
+    generated: list[Path] = []
+    for path in staging.rglob("*"):
+        if path.is_symlink():
+            raise ValueError("staging contains a symbolic link")
+        if not path.is_file():
+            continue
+        relative = path.relative_to(staging)
+        if relative.parts[:3] != ("io", "github", "shusek"):
+            continue
+        artifact_metadata = len(relative.parts) == 5 and path.name == "maven-metadata.xml"
+        version_sidecar = (
+            len(relative.parts) == 6
+            and relative.parts[4] == version
+            and path.name.endswith(GENERATED_CHECKSUM_SUFFIXES)
+        )
+        metadata_sidecar = (
+            len(relative.parts) == 5
+            and any(path.name == "maven-metadata.xml" + suffix for suffix in GENERATED_CHECKSUM_SUFFIXES)
+        )
+        if artifact_metadata or version_sidecar or metadata_sidecar:
+            generated.append(path)
+    for path in generated:
+        path.unlink()
+    primary = {path for path in staging.rglob("*") if path.is_file()}
+    if not primary:
+        raise ValueError("staging is empty after normalization")
+    roots = set()
+    for path in primary:
+        relative = path.relative_to(staging)
+        if (
+            relative.parts[:3] != ("io", "github", "shusek")
+            or len(relative.parts) != 6
+            or relative.parts[4] != version
+        ):
+            raise ValueError(f"artifact lies outside the release namespace/version: {relative}")
+        roots.add(relative.parts[3])
+    if not ROOT_ARTIFACTS.issubset(roots):
+        raise ValueError(f"root publications are missing: {sorted(ROOT_ARTIFACTS - roots)}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--staging", type=Path, required=True)
     parser.add_argument("--version", required=True)
-    parser.add_argument("--epoch", type=int, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--epoch", type=int)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--normalize", action="store_true")
     arguments = parser.parse_args()
     if not SEMVER.fullmatch(arguments.version):
         raise ValueError("version must be immutable SemVer")
     staging = arguments.staging.resolve()
     if not staging.is_dir() or staging.is_symlink() or any(path.is_symlink() for path in staging.rglob("*")):
         raise ValueError("staging must be a real symlink-free directory")
+    if arguments.normalize:
+        if arguments.epoch is not None or arguments.output is not None:
+            raise ValueError("normalization does not accept bundle output arguments")
+        normalize_staging(staging, arguments.version)
+        return 0
+    if arguments.epoch is None or arguments.output is None:
+        raise ValueError("bundle creation requires --epoch and --output")
     primary = {path for path in staging.rglob("*") if path.is_file() and not path.name.endswith((".asc", ".md5", ".sha1"))}
     if not primary or any("maven-metadata.xml" in path.name for path in primary):
         raise ValueError("staging is empty or contains mutable Maven metadata")
