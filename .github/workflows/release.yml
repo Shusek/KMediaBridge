@@ -130,9 +130,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RUNTIME_VERSION: ${{ inputs.runtime_version }}
         run: |
+          github_cli=gh
+          if [[ '${{ matrix.target }}' == windows-* ]]; then github_cli="/c/Program Files/GitHub CLI/gh.exe"; fi
           name="kmedia-ffmpeg-runtime-$RUNTIME_VERSION-${{ matrix.target }}-sdk.tar.gz"
           mkdir "$RUNNER_TEMP/runtime"
-          gh release download "v$RUNTIME_VERSION" -R Shusek/KMediaFfmpegRuntime \
+          "$github_cli" release download "v$RUNTIME_VERSION" -R Shusek/KMediaFfmpegRuntime \
             --dir "$RUNNER_TEMP/runtime" --pattern "$name" --pattern SHA256SUMS
           expected="$(awk -v p="$name" '$2 == p || $2 == "./" p {print $1}' "$RUNNER_TEMP/runtime/SHA256SUMS")"
           [[ "$expected" =~ ^[0-9a-f]{64}$ ]]
