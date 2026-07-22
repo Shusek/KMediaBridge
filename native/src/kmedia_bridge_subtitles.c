@@ -18,10 +18,14 @@
 #include <libavutil/frame.h>
 #include <libavutil/opt.h>
 #include <libavutil/pixfmt.h>
+#include <libavutil/time.h>
 
 #include <errno.h>
 #include <stddef.h>
 #include <stdio.h>
+
+#define KMB_CODEC_EAGAIN_RETRY_LIMIT 5000
+#define KMB_CODEC_EAGAIN_RETRY_DELAY_US 1000
 
 typedef struct KmbSubtitleWriteState {
     KmbWriteCallback callback;
@@ -604,6 +608,20 @@ static KmbResult kmb_subtitle_encode_filtered_frames(KmbSubtitlePipeline *pipeli
         pipeline->filtered_frame->color_trc = AVCOL_TRC_BT709;
         pipeline->filtered_frame->colorspace = AVCOL_SPC_BT709;
         result = avcodec_send_frame(pipeline->encoder, pipeline->filtered_frame);
+        int retry_count = 0;
+        while (result == AVERROR(EAGAIN) && retry_count++ < KMB_CODEC_EAGAIN_RETRY_LIMIT) {
+            KmbResult bridge_result = kmb_subtitle_write_encoded_packets(pipeline, output_error);
+            if (bridge_result != KMB_OK) {
+                av_frame_unref(pipeline->filtered_frame);
+                return bridge_result;
+            }
+            if (pipeline->write_state.cancelled) {
+                av_frame_unref(pipeline->filtered_frame);
+                return KMB_CANCELLED;
+            }
+            av_usleep(KMB_CODEC_EAGAIN_RETRY_DELAY_US);
+            result = avcodec_send_frame(pipeline->encoder, pipeline->filtered_frame);
+        }
         av_frame_unref(pipeline->filtered_frame);
         if (result < 0) {
             kmb_subtitle_set_av_error(output_error, "Could not submit a composited video frame", result);
@@ -623,16 +641,11 @@ static KmbResult kmb_subtitle_encode_filtered_frames(KmbSubtitlePipeline *pipeli
     return KMB_OK;
 }
 
-static KmbResult kmb_subtitle_decode_video_packet(
+static KmbResult kmb_subtitle_receive_decoded_frames(
     KmbSubtitlePipeline *pipeline,
-    const AVPacket *packet,
     char **output_error
 ) {
-    int result = avcodec_send_packet(pipeline->decoder, packet);
-    if (result < 0) {
-        kmb_subtitle_set_av_error(output_error, "Could not submit a compressed video packet", result);
-        return KMB_READ_FAILED;
-    }
+    int result = 0;
     while ((result = avcodec_receive_frame(pipeline->decoder, pipeline->decoded_frame)) >= 0) {
         pipeline->decoded_frame->pts = pipeline->decoded_frame->best_effort_timestamp;
         result = av_buffersrc_add_frame_flags(
@@ -647,9 +660,7 @@ static KmbResult kmb_subtitle_decode_video_packet(
         }
         {
             KmbResult bridge_result = kmb_subtitle_encode_filtered_frames(pipeline, output_error);
-            if (bridge_result != KMB_OK) {
-                return bridge_result;
-            }
+            if (bridge_result != KMB_OK) return bridge_result;
         }
     }
     if (result != AVERROR(EAGAIN) && result != AVERROR_EOF) {
@@ -657,6 +668,27 @@ static KmbResult kmb_subtitle_decode_video_packet(
         return KMB_READ_FAILED;
     }
     return KMB_OK;
+}
+
+static KmbResult kmb_subtitle_decode_video_packet(
+    KmbSubtitlePipeline *pipeline,
+    const AVPacket *packet,
+    char **output_error
+) {
+    int result = avcodec_send_packet(pipeline->decoder, packet);
+    int retry_count = 0;
+    while (result == AVERROR(EAGAIN) && retry_count++ < KMB_CODEC_EAGAIN_RETRY_LIMIT) {
+        KmbResult bridge_result = kmb_subtitle_receive_decoded_frames(pipeline, output_error);
+        if (bridge_result != KMB_OK) return bridge_result;
+        if (pipeline->write_state.cancelled) return KMB_CANCELLED;
+        av_usleep(KMB_CODEC_EAGAIN_RETRY_DELAY_US);
+        result = avcodec_send_packet(pipeline->decoder, packet);
+    }
+    if (result < 0) {
+        kmb_subtitle_set_av_error(output_error, "Could not submit a compressed video packet", result);
+        return KMB_READ_FAILED;
+    }
+    return kmb_subtitle_receive_decoded_frames(pipeline, output_error);
 }
 
 static KmbResult kmb_subtitle_copy_audio_packet(

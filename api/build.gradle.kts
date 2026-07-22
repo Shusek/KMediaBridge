@@ -17,7 +17,7 @@ kotlin {
 
     android {
         namespace = "io.github.shusek.kmediabridge.api"
-        compileSdk = 36
+        compileSdk = 37
         minSdk = 23
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
@@ -34,8 +34,6 @@ kotlin {
     iosArm64()
     iosSimulatorArm64()
     macosArm64()
-    @Suppress("DEPRECATION")
-    macosX64()
     linuxX64()
     linuxArm64()
     mingwX64()
@@ -58,6 +56,12 @@ kotlin {
 
 publishing {
     repositories {
+        rootProject.providers.gradleProperty("releaseRepository").orNull?.let { repositoryPath ->
+            maven {
+                name = "release"
+                url = uri(repositoryPath)
+            }
+        }
         maven {
             name = "internalCoreCompliance"
             url =

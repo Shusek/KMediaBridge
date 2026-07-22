@@ -20,6 +20,18 @@ plugins {
 
 rootProject.name = "KMediaBridge"
 
+val sharedRuntimeProjectDir = providers.gradleProperty("kmediaFfmpegRuntimeProjectDir").orNull
+if (sharedRuntimeProjectDir != null) {
+    includeBuild(sharedRuntimeProjectDir) {
+        dependencySubstitution {
+            substitute(module("io.github.shusek:kmedia-ffmpeg-runtime-android"))
+                .using(project(":kmedia-ffmpeg-runtime-android"))
+            substitute(module("io.github.shusek:kmedia-ffmpeg-runtime-desktop"))
+                .using(project(":kmedia-ffmpeg-runtime-desktop"))
+        }
+    }
+}
+
 dependencyResolutionManagement {
     repositories {
         google {
@@ -28,6 +40,9 @@ dependencyResolutionManagement {
                 includeGroupByRegex("com\\.google.*")
                 includeGroupByRegex("androidx.*")
             }
+        }
+        providers.gradleProperty("kmediaFfmpegRuntimeRepository").orNull?.let { repositoryPath ->
+            maven { url = uri(repositoryPath) }
         }
         mavenCentral()
     }

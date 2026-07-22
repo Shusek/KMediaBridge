@@ -28,6 +28,8 @@ import io.github.shusek.kmediabridge.SubtitleHandling
 import io.github.shusek.kmediabridge.VideoColorInfo
 import io.github.shusek.kmediabridge.VideoHandling
 import io.github.shusek.kmediabridge.VideoTrackInfo
+import io.github.shusek.kmediaffmpeg.runtime.KMediaFfmpegRuntime
+import io.github.shusek.kmediaffmpeg.runtime.RuntimeSource as SharedRuntimeSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -241,6 +243,7 @@ private data class AndroidRuntimeManifest(
     val rootDirectory: File?,
     val origin: FfmpegRuntimeOrigin,
 ) {
+    val sharedRuntimeId: String = required("sharedRuntimeId")
     val ffmpegVersion: String = required("ffmpegVersion")
     val ffmpegLicenseSpdx: String = required("ffmpegLicenseSpdx")
     val sourceArchiveUrl: String = required("ffmpegSourceArchiveUrl")
@@ -262,11 +265,14 @@ private data class AndroidRuntimeManifest(
             "The Android HDR runtime unexpectedly declares subtitle burn-in."
         }
         require(dynamicLinkingVerified) { "The Android runtime has no verified dynamic FFmpeg boundary." }
+        require(sharedRuntimeId.matches(Regex("kmediaffmpeg-8\\.1\\.2-ass-0\\.17\\.4-[0-9a-f]{16}"))) {
+            "The Android client manifest has an invalid shared runtime ID."
+        }
     }
 
     fun verifyAndLoad() {
         if (rootDirectory == null) {
-            LIBRARIES_IN_LOAD_ORDER.forEach(System::loadLibrary)
+            System.loadLibrary("kmediabridge")
             return
         }
         val directory = rootDirectory.resolve(abi)
@@ -276,7 +282,7 @@ private data class AndroidRuntimeManifest(
             val expected = requiredSha256("${abiPrefix()}$name.sha256")
             require(sha256(library) == expected) { "An external Android FFmpeg runtime library failed its SHA-256 check." }
         }
-        LIBRARY_FILE_NAMES.forEach { name -> System.load(directory.resolve(name).absolutePath) }
+        System.load(directory.resolve("libkmediabridge.so").absolutePath)
     }
 
     private fun abiPrefix(): String {
@@ -326,6 +332,12 @@ private object AndroidFfmpegRuntimeLoader {
                 return@synchronized runtime
             }
             val manifest = readManifest(selection, classLoader)
+            val sharedRuntime =
+                KMediaFfmpegRuntime.currentOrNull()
+                    ?: KMediaFfmpegRuntime.initialize(SharedRuntimeSource.bundled())
+            if (sharedRuntime.runtimeId() != manifest.sharedRuntimeId) {
+                rejectRuntime("The Android KMediaBridge client targets a different KMediaFfmpegRuntime ID.")
+            }
             try {
                 manifest.verifyAndLoad()
             } catch (failure: Throwable) {
@@ -340,7 +352,10 @@ private object AndroidFfmpegRuntimeLoader {
             val actualLicense = AndroidFfmpegNative.ffmpegLicenseBytes().decodeToString()
             val actualConfiguration = AndroidFfmpegNative.ffmpegConfigurationBytes().decodeToString()
             val actualFeatures = AndroidFfmpegNative.runtimeFeaturesJsonBytes().decodeToString()
-            if (actualAbi != SUPPORTED_ABI || actualVersion != manifest.ffmpegVersion) {
+            if (actualAbi != SUPPORTED_ABI ||
+                actualVersion != manifest.ffmpegVersion ||
+                actualVersion != sharedRuntime.componentVersions()["ffmpeg"]
+            ) {
                 rejectRuntime("The loaded Android FFmpeg identity differs from its manifest.")
             }
             if (actualFeatures != EXPECTED_FEATURES) {
@@ -370,6 +385,8 @@ private object AndroidFfmpegRuntimeLoader {
                     exactCorrespondingSourceAvailable = manifest.exactCorrespondingSourceAvailable,
                     dynamicLinkingVerified = manifest.dynamicLinkingVerified,
                     origin = manifest.origin,
+                    sharedRuntimeId = sharedRuntime.runtimeId(),
+                    sharedRuntimeConfigurationSha256 = sharedRuntime.configurationSha256(),
                 )
             FfmpegComplianceVerifier.requireAllowedByDistributionPolicy(info)
             LoadedAndroidFfmpegRuntime(info).also { runtime -> loaded = key to runtime }
@@ -618,14 +635,9 @@ private val FORBIDDEN_BUNDLED_FLAGS = setOf("--enable-gpl", "--enable-nonfree", 
 private val SHA256 = Regex("^[0-9a-f]{64}$")
 private val LIBRARY_FILE_NAMES =
     listOf(
-        "libavutil-kmb.so",
-        "libavcodec-kmb.so",
-        "libavformat-kmb.so",
-        "libswscale-kmb.so",
         "libkmediabridge.so",
     )
-private val LIBRARIES_IN_LOAD_ORDER = listOf("avutil-kmb", "avcodec-kmb", "avformat-kmb", "swscale-kmb", "kmediabridge")
 private const val SUPPORTED_ABI = 4
 private const val EXPECTED_FEATURES = "{\"subtitleBurnIn\":false,\"hdrToSdrToneMap\":true}"
-private const val BUNDLED_MANIFEST = "META-INF/kmediabridge/android-runtime.properties"
-private const val EXTERNAL_MANIFEST = "android-runtime.properties"
+private const val BUNDLED_MANIFEST = "META-INF/kmediabridge/android-client.properties"
+private const val EXTERNAL_MANIFEST = "android-client.properties"

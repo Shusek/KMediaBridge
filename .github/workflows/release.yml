@@ -1,382 +1,255 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
-name: Release
+name: Build immutable KMediaBridge release
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: KMediaBridge SemVer, for example 0.5.0-rc.1
+        required: true
+        type: string
+      runtime_version:
+        description: Exact released KMediaFfmpegRuntime version
+        required: true
+        default: 0.1.0-rc.1
+        type: string
+      tested_commit:
+        description: Forty-character commit tested locally
+        required: true
+        type: string
+      tested_runtime_id:
+        description: Runtime ID used by the local Android ARM matrix
+        required: true
+        type: string
+      android_arm_matrix_verified:
+        description: Confirm API 28/35 ARM64 and API 28 ARMv7 device tests passed locally
+        required: true
+        default: false
+        type: boolean
+      runtime_report_sha256:
+        description: SHA-256 of the retained path-free runtime report
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 concurrency:
-  group: release
+  group: kmediabridge-release-${{ inputs.version }}
   cancel-in-progress: false
 
-env:
-  ANDROID_NDK_VERSION: 29.0.14206865
-  ANDROID_RUNTIME_ABIS: arm64-v8a,armeabi-v7a,x86_64
-
 jobs:
-  native:
-    name: Build native payload (${{ matrix.platform }})
-    runs-on: ${{ matrix.runner }}
+  readiness:
+    runs-on: ubuntu-24.04
+    outputs:
+      revision: ${{ steps.identity.outputs.revision }}
+      epoch: ${{ steps.identity.outputs.epoch }}
+    env:
+      VERSION: ${{ inputs.version }}
+      RUNTIME_VERSION: ${{ inputs.runtime_version }}
+      TESTED_COMMIT: ${{ inputs.tested_commit }}
+      TESTED_RUNTIME_ID: ${{ inputs.tested_runtime_id }}
+      ARM_MATRIX: ${{ inputs.android_arm_matrix_verified }}
+      REPORT_SHA256: ${{ inputs.runtime_report_sha256 }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: identity
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          test "$ARM_MATRIX" = true
+          [[ "$VERSION" =~ ^0\.5\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]
+          test "$RUNTIME_VERSION" = 0.1.0-rc.1
+          revision="$(git rev-parse HEAD)"
+          test "$revision" = "$TESTED_COMMIT"
+          [[ "$TESTED_RUNTIME_ID" =~ ^kmediaffmpeg-8\.1\.2-ass-0\.17\.4-[0-9a-f]{16}$ ]]
+          [[ "$REPORT_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          python3 scripts/verify_compliance.py --root .
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+          echo "epoch=$(git show -s --format=%ct HEAD)" >> "$GITHUB_OUTPUT"
+
+  client:
+    needs: readiness
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: linux-x86_64
-            runner: ubuntu-24.04
-            build: ./native/build-ffmpeg-unix.sh
-            runnable: true
-          - platform: macos-aarch64
-            runner: macos-15
-            build: ./native/build-ffmpeg-unix.sh
-            runnable: true
-          - platform: macos-x86_64
-            runner: macos-15-intel
-            build: ./native/build-ffmpeg-unix.sh
-            runnable: true
-          - platform: windows-x86_64
-            runner: ubuntu-24.04
-            build: ./native/build-ffmpeg-windows-x64.sh
-            runnable: false
+          - { target: linux-x86_64, runner: ubuntu-24.04, shell: bash }
+          - { target: linux-aarch64, runner: ubuntu-24.04-arm, shell: bash }
+          - { target: macos-aarch64, runner: macos-15, shell: bash }
+          - { target: windows-x86_64, runner: windows-2022, shell: 'msys2 {0}' }
+          - { target: android-arm64-v8a, runner: ubuntu-24.04, shell: bash }
+          - { target: android-armeabi-v7a, runner: ubuntu-24.04, shell: bash }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
     steps:
-      - name: Check out the immutable tag
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Preserve LF source bytes on Windows
+        if: matrix.target == 'windows-x86_64'
+        shell: pwsh
+        run: git config --global core.autocrlf input
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
-          fetch-depth: 0
-      - name: Validate stable version
-        id: version
-        shell: bash
-        run: |
-          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Only stable vMAJOR.MINOR.PATCH tags may publish." >&2
-            exit 1
-          fi
-          echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-      - name: Install the Windows cross toolchain
-        if: matrix.platform == 'windows-x86_64'
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes gcc-mingw-w64-x86-64 gnupg
-      - name: Install GnuPG on Linux
-        if: matrix.platform == 'linux-x86_64'
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes gnupg
-      - name: Install signed-source and subtitle build tools on macOS
-        if: startsWith(matrix.platform, 'macos-')
-        run: brew install gnupg meson ninja pkgconf
-      - name: Verify the signed FFmpeg source release
-        shell: bash
-        run: |
-          mkdir -p "$RUNNER_TEMP/native-work"
-          curl --fail --location --proto '=https' --tlsv1.2 \
-            --output "$RUNNER_TEMP/native-work/ffmpeg-8.1.2.tar.xz" \
-            https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz
-          curl --fail --location --proto '=https' --tlsv1.2 \
-            --output "$RUNNER_TEMP/ffmpeg-8.1.2.tar.xz.asc" \
-            https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz.asc
-          curl --fail --location --proto '=https' --tlsv1.2 \
-            --output "$RUNNER_TEMP/ffmpeg-devel.asc" \
-            https://ffmpeg.org/ffmpeg-devel.asc
-          ./scripts/verify_ffmpeg_release.sh \
-            "$RUNNER_TEMP/native-work/ffmpeg-8.1.2.tar.xz" \
-            "$RUNNER_TEMP/ffmpeg-8.1.2.tar.xz.asc" \
-            "$RUNNER_TEMP/ffmpeg-devel.asc"
-      - name: Build and inspect the LGPL runtime
-        shell: bash
-        run: |
-          if [[ "${{ matrix.platform }}" == macos-* ]]; then
-            ./native/build-ffmpeg-unix.sh \
-              "$RUNNER_TEMP/native-work" "$RUNNER_TEMP/native-dist" subtitle-sdr
-          else
-            ${{ matrix.build }} "$RUNNER_TEMP/native-work" "$RUNNER_TEMP/native-dist"
-          fi
-      - name: Package classpath runtime resources
-        run: >-
-          python3 scripts/package_native_runtime.py
-          --dist "$RUNNER_TEMP/native-dist"
-          --platform "${{ matrix.platform }}"
-          --resources "$RUNNER_TEMP/native-resources"
-          --release-version "${{ steps.version.outputs.value }}"
-          --revision "${{ github.sha }}"
-      - name: Set up Java for the JVM integration test
-        if: matrix.runnable
-        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
+          ref: ${{ needs.readiness.outputs.revision }}
+          persist-credentials: false
+      - name: Install Android NDK
+        if: startsWith(matrix.target, 'android-')
+        run: /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager 'ndk;29.0.14206865'
+      - name: Install Windows compiler
+        if: matrix.target == 'windows-x86_64'
+        uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0
         with:
-          distribution: temurin
-          java-version: "17"
-          cache: gradle
-      - name: Exercise the packaged runtime
-        if: matrix.runnable
-        run: >-
-          ./gradlew --no-daemon :ffmpeg:jvmTest
-          -PnativePayloadDirectory="$RUNNER_TEMP/native-resources"
-      - name: Assemble a replaceable platform bundle
-        shell: bash
-        run: |
-          archive="$RUNNER_TEMP/kmedia-bridge-${{ steps.version.outputs.value }}-${{ matrix.platform }}.tar.gz"
-          tar -czf "$archive" \
-            --exclude='compliance/source' \
-            --exclude='compliance/subtitle-components/source' \
-            -C "$RUNNER_TEMP/native-dist" lib include compliance
-      - name: Upload classpath resources
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: native-resources-${{ matrix.platform }}
-          path: ${{ runner.temp }}/native-resources
-          if-no-files-found: error
-      - name: Upload the platform bundle
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: native-bundle-${{ matrix.platform }}
-          path: ${{ runner.temp }}/kmedia-bridge-${{ steps.version.outputs.value }}-${{ matrix.platform }}.tar.gz
-          if-no-files-found: error
-      - name: Upload exact corresponding source archives
-        if: matrix.platform == 'macos-aarch64'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: corresponding-source-archives
-          path: |
-            ${{ runner.temp }}/native-dist/compliance/source/*
-            ${{ runner.temp }}/native-dist/compliance/subtitle-components/source/*
-          if-no-files-found: error
-
-  android-native:
-    name: Build Android LGPL runtime
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Check out the immutable tag
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          fetch-depth: 0
-      - name: Set up Java
-        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
-        with:
-          distribution: temurin
-          java-version: "17"
-      - name: Set up Android SDK command-line tools
-        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
-        with:
-          packages: ""
-      - name: Validate stable version
-        id: version
-        shell: bash
-        run: |
-          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Only stable vMAJOR.MINOR.PATCH tags may publish." >&2
-            exit 1
-          fi
-          echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-      - name: Install the pinned Android NDK
-        shell: bash
-        run: sdkmanager "ndk;$ANDROID_NDK_VERSION"
-      - name: Verify the signed FFmpeg source release
-        shell: bash
-        run: |
-          mkdir -p "$RUNNER_TEMP/android-work"
-          curl --fail --location --proto '=https' --tlsv1.2 \
-            --output "$RUNNER_TEMP/android-work/ffmpeg-8.1.2.tar.xz" \
-            https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz
-          curl --fail --location --proto '=https' --tlsv1.2 \
-            --output "$RUNNER_TEMP/ffmpeg-8.1.2.tar.xz.asc" \
-            https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz.asc
-          curl --fail --location --proto '=https' --tlsv1.2 \
-            --output "$RUNNER_TEMP/ffmpeg-devel.asc" \
-            https://ffmpeg.org/ffmpeg-devel.asc
-          ./scripts/verify_ffmpeg_release.sh \
-            "$RUNNER_TEMP/android-work/ffmpeg-8.1.2.tar.xz" \
-            "$RUNNER_TEMP/ffmpeg-8.1.2.tar.xz.asc" \
-            "$RUNNER_TEMP/ffmpeg-devel.asc"
-      - name: Build and inspect every Android ABI
-        shell: bash
-        run: >-
-          ./native/build-ffmpeg-android.sh
-          "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
-          "$RUNNER_TEMP/android-work"
-          "$RUNNER_TEMP/android-dist"
-          "$ANDROID_RUNTIME_ABIS"
-          "$RUNNER_TEMP/android-work/ffmpeg-8.1.2.tar.xz"
-      - name: Assemble a replaceable Android bundle
-        shell: bash
-        run: >-
-          tar -czf
-          "$RUNNER_TEMP/kmedia-bridge-${{ steps.version.outputs.value }}-android.tar.gz"
-          -C "$RUNNER_TEMP/android-dist"
-          jniLibs compliance
-      - name: Upload the Android native payload
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: android-native-payload
-          path: ${{ runner.temp }}/android-dist
-          if-no-files-found: error
-      - name: Upload the replaceable Android bundle
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: native-bundle-android
-          path: ${{ runner.temp }}/kmedia-bridge-${{ steps.version.outputs.value }}-android.tar.gz
-          if-no-files-found: error
-
-  release:
-    name: Publish LGPL runtime and release evidence
-    needs:
-      - native
-      - android-native
-    runs-on: macos-15
-    steps:
-      - name: Check out the immutable tag
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          fetch-depth: 0
-      - name: Set up Java
-        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
-        with:
-          distribution: temurin
-          java-version: "17"
-          cache: gradle
-      - name: Set up Android SDK command-line tools
-        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
-        with:
-          packages: ""
-      - name: Install the Android platform used by the runtime AAR
-        run: sdkmanager "platforms;android-36"
-      - name: Validate stable version
-        id: version
-        shell: bash
-        run: |
-          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Only stable vMAJOR.MINOR.PATCH tags may publish." >&2
-            exit 1
-          fi
-          echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-      - name: Download all native classpath resources
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          pattern: native-resources-*
-          path: ${{ runner.temp }}/native-resources
-          merge-multiple: true
-      - name: Download all replaceable platform bundles
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          pattern: native-bundle-*
-          path: ${{ runner.temp }}/native-bundles
-          merge-multiple: true
-      - name: Download the Android native payload
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: android-native-payload
-          path: ${{ runner.temp }}/android-dist
-      - name: Download exact corresponding source archives
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: corresponding-source-archives
-          path: ${{ runner.temp }}/corresponding-sources
-      - name: Assemble and verify the binary manifest
-        run: >-
-          python3 scripts/assemble_runtime_manifest.py
-          --resources "$RUNNER_TEMP/native-resources"
-          --version "${{ steps.version.outputs.value }}"
-      - name: Run every source, publication, and native gate
-        run: >-
-          ./gradlew --no-daemon check complianceCheck
-          -PpublicationVersion=${{ steps.version.outputs.value }}
-          -PdesktopNativePayloadDirectory="$RUNNER_TEMP/native-resources"
-          -PandroidNativePayloadDirectory="$RUNNER_TEMP/android-dist"
-          -PandroidRuntimeAbis="$ANDROID_RUNTIME_ABIS"
-          -PbuildRecipeRevision="${{ github.sha }}"
-      - name: Prepare the version-preserving Pages repository
-        id: pages
-        shell: bash
-        run: |
-          pages_dir="$RUNNER_TEMP/gh-pages"
-          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
-            git fetch origin gh-pages:refs/remotes/origin/gh-pages
-            git worktree add --detach "$pages_dir" origin/gh-pages
-          else
-            git worktree add --detach "$pages_dir" HEAD
-            git -C "$pages_dir" checkout --orphan gh-pages
-            git -C "$pages_dir" rm -rf .
-          fi
-          cp -R site/. "$pages_dir/"
-          touch "$pages_dir/.nojekyll"
-          echo "directory=$pages_dir" >> "$GITHUB_OUTPUT"
-      - name: Publish Maven repository to the Pages worktree
-        run: >-
-          ./gradlew --no-daemon
-          :ffmpeg-runtime-desktop:publishAllPublicationsToGithubPagesRepository
-          :ffmpeg-runtime-android:publishAllPublicationsToGithubPagesRepository
-          -PpublicationVersion=${{ steps.version.outputs.value }}
-          -PdesktopNativePayloadDirectory="$RUNNER_TEMP/native-resources"
-          -PandroidNativePayloadDirectory="$RUNNER_TEMP/android-dist"
-          -PandroidRuntimeAbis="$ANDROID_RUNTIME_ABIS"
-          -PbuildRecipeRevision="${{ github.sha }}"
-          -PgithubPagesMavenRepository=${{ steps.pages.outputs.directory }}/maven
-      - name: Push the immutable Maven version
-        shell: bash
-        run: |
-          pages_dir="${{ steps.pages.outputs.directory }}"
-          git -C "$pages_dir" config user.name "github-actions[bot]"
-          git -C "$pages_dir" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git -C "$pages_dir" add --all
-          if ! git -C "$pages_dir" diff --cached --quiet; then
-            git -C "$pages_dir" commit -m "Publish ${{ github.ref_name }}"
-            git -C "$pages_dir" push origin HEAD:gh-pages
-          fi
-      - name: Assemble release and LGPL evidence
-        id: evidence
-        shell: bash
-        run: |
-          version="${{ steps.version.outputs.value }}"
-          evidence="$RUNNER_TEMP/release-evidence"
-          mkdir -p "$evidence"
-          cp build/reports/compliance/sbom.cdx.json "$evidence/kmedia-bridge-$version-sbom.cdx.json"
-          cp "$RUNNER_TEMP/native-bundles/"* "$evidence/"
-          find "$RUNNER_TEMP/corresponding-sources" -type f \
-            \( -name '*.tar.xz' -o -name '*.tar.gz' \) \
-            -exec cp {} "$evidence/" \;
-          curl --fail --location --proto '=https' --tlsv1.2 \
-            --output "$evidence/ffmpeg-8.1.2.tar.xz.asc" \
-            https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz.asc
-          curl --fail --location --proto '=https' --tlsv1.2 \
-            --output "$evidence/ffmpeg-devel.asc" \
-            https://ffmpeg.org/ffmpeg-devel.asc
-          test "$(shasum -a 256 "$evidence/ffmpeg-8.1.2.tar.xz" | awk '{print $1}')" = \
-            "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c"
-          python3 - <<'PY'
-          import hashlib
-          import json
-          import os
-          from pathlib import Path
-
-          evidence = Path(os.environ["RUNNER_TEMP"]) / "release-evidence"
-          manifest = json.loads(Path("compliance/subtitles/manifest.json").read_text())
-          for component in manifest["components"]:
-              archive = evidence / Path(component["sourceUrl"]).name
-              actual = hashlib.sha256(archive.read_bytes()).hexdigest()
-              if actual != component["sourceSha256"]:
-                  raise SystemExit(f"source hash mismatch: {archive.name}")
-          PY
-          tar -czf "$evidence/kmedia-bridge-$version-native-resources.tar.gz" \
-            -C "$RUNNER_TEMP/native-resources" .
-          tar -czf "$evidence/kmedia-bridge-$version-android-native-payload.tar.gz" \
-            -C "$RUNNER_TEMP/android-dist" .
-          tar -czf "$evidence/kmedia-bridge-$version-compliance.tar.gz" \
-            LICENSE LICENSES NOTICE THIRD_PARTY_NOTICES.md docs compliance native scripts
-          (
-            cd "$evidence"
-            shasum -a 256 ./* > SHA256SUMS
-          )
-          echo "directory=$evidence" >> "$GITHUB_OUTPUT"
-      - name: Create GitHub release
+          msystem: UCRT64
+          update: true
+          install: >-
+            base-devel
+            git
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-python
+      - name: Download and hash-bind the runtime SDK
         env:
           GH_TOKEN: ${{ github.token }}
-        shell: bash
+          RUNTIME_VERSION: ${{ inputs.runtime_version }}
         run: |
-          gh release create "${{ github.ref_name }}" \
-            "${{ steps.evidence.outputs.directory }}/"* \
-            --verify-tag \
-            --generate-notes \
-            --title "KMediaBridge ${{ steps.version.outputs.value }}"
+          name="kmedia-ffmpeg-runtime-$RUNTIME_VERSION-${{ matrix.target }}-sdk.tar.gz"
+          mkdir "$RUNNER_TEMP/runtime"
+          gh release download "v$RUNTIME_VERSION" -R Shusek/KMediaFfmpegRuntime \
+            --dir "$RUNNER_TEMP/runtime" --pattern "$name" --pattern SHA256SUMS
+          expected="$(awk -v p="$name" '$2 == p || $2 == "./" p {print $1}' "$RUNNER_TEMP/runtime/SHA256SUMS")"
+          [[ "$expected" =~ ^[0-9a-f]{64}$ ]]
+          actual="$(python3 -c 'import hashlib,sys; h=hashlib.sha256(); f=open(sys.argv[1],"rb"); [h.update(b) for b in iter(lambda:f.read(1048576),b"")]; print(h.hexdigest())' "$RUNNER_TEMP/runtime/$name")"
+          test "$actual" = "$expected"
+          tar -xzf "$RUNNER_TEMP/runtime/$name" -C "$RUNNER_TEMP/runtime"
+          test "$(cat "$RUNNER_TEMP/runtime/runtime-id.txt")" = '${{ inputs.tested_runtime_id }}'
+      - name: Build one bridge client against the exact SDK
+        run: |
+          runner_temp="$RUNNER_TEMP"
+          if [[ '${{ matrix.target }}' == windows-* ]]; then runner_temp="$(cygpath -u "$RUNNER_TEMP")"; fi
+          source_name="kmedia-ffmpeg-runtime-$RUNTIME_VERSION-corresponding-source.tar.gz"
+          source_sha="$(awk -v p="$source_name" '$2 == p || $2 == "./" p {print $1}' "$runner_temp/runtime/SHA256SUMS")"
+          [[ "$source_sha" =~ ^[0-9a-f]{64}$ ]]
+          args=()
+          if [[ '${{ matrix.target }}' == android-* ]]; then args+=(--ndk /usr/local/lib/android/sdk/ndk/29.0.14206865); fi
+          python3 -B native/build-client.py \
+            --target '${{ matrix.target }}' \
+            --runtime-sdk "$runner_temp/runtime/sdk/${{ matrix.target }}" \
+            --runtime-version "$RUNTIME_VERSION" --runtime-source-sha256 "$source_sha" \
+            --version '${{ inputs.version }}' --revision '${{ needs.readiness.outputs.revision }}' \
+            --output "$runner_temp/client-output" "${args[@]}"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: client-${{ matrix.target }}
+          path: ${{ runner.temp }}/client-output
+          if-no-files-found: error
+          compression-level: 0
+
+  aggregate:
+    needs: [readiness, client]
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      VERSION: ${{ inputs.version }}
+      RUNTIME_VERSION: ${{ inputs.runtime_version }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ needs.readiness.outputs.revision }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - run: brew install gnu-tar
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: client-*
+          path: ${{ runner.temp }}/clients
+      - name: Assemble the closed Android and desktop client inventories
+        run: |
+          ids="$(find "$RUNNER_TEMP/clients" -name manifest.properties -exec sed -n 's/^sharedRuntimeId=//p' {} \; | sort -u)"
+          test "$(printf '%s\n' "$ids" | sed '/^$/d' | wc -l)" -eq 1
+          test "$ids" = '${{ inputs.tested_runtime_id }}'
+          python3 scripts/assemble_android_clients.py \
+            --arm64 "$RUNNER_TEMP/clients/client-android-arm64-v8a" \
+            --armv7 "$RUNNER_TEMP/clients/client-android-armeabi-v7a" \
+            --output "$RUNNER_TEMP/android-client"
+          python3 scripts/package_client_resources.py \
+            --client "linux-x86_64=$RUNNER_TEMP/clients/client-linux-x86_64" \
+            --client "linux-aarch64=$RUNNER_TEMP/clients/client-linux-aarch64" \
+            --client "macos-aarch64=$RUNNER_TEMP/clients/client-macos-aarch64" \
+            --client "windows-x86_64=$RUNNER_TEMP/clients/client-windows-x86_64" \
+            --output "$RUNNER_TEMP/desktop-client"
+      - name: Download the exact runtime Maven repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          name="kmedia-ffmpeg-runtime-$RUNTIME_VERSION-maven-repository.tar.gz"
+          mkdir "$RUNNER_TEMP/runtime-release" "$RUNNER_TEMP/runtime-maven"
+          gh release download "v$RUNTIME_VERSION" -R Shusek/KMediaFfmpegRuntime \
+            --dir "$RUNNER_TEMP/runtime-release" --pattern "$name" --pattern SHA256SUMS
+          expected="$(awk -v p="$name" '$2 == p || $2 == "./" p {print $1}' "$RUNNER_TEMP/runtime-release/SHA256SUMS")"
+          [[ "$expected" =~ ^[0-9a-f]{64}$ ]]
+          test "$expected" = "$(shasum -a 256 "$RUNNER_TEMP/runtime-release/$name" | awk '{print $1}')"
+          tar -xzf "$RUNNER_TEMP/runtime-release/$name" -C "$RUNNER_TEMP/runtime-maven"
+      - name: Verify APIs and stage all four transitive Maven roots
+        run: |
+          ./gradlew --no-daemon check complianceCheck \
+            -PpublicationVersion="$VERSION" \
+            -PkmediaFfmpegRuntimeRepository="$RUNNER_TEMP/runtime-maven/maven" \
+            -PkmediaBridgeAndroidNativePayloadDirectory="$RUNNER_TEMP/android-client" \
+            -PkmediaBridgeDesktopNativePayloadDirectory="$RUNNER_TEMP/desktop-client"
+          ./gradlew --no-daemon \
+            -PpublicationVersion="$VERSION" \
+            -PkmediaFfmpegRuntimeRepository="$RUNNER_TEMP/runtime-maven/maven" \
+            -PkmediaBridgeAndroidNativePayloadDirectory="$RUNNER_TEMP/android-client" \
+            -PkmediaBridgeDesktopNativePayloadDirectory="$RUNNER_TEMP/desktop-client" \
+            -PreleaseRepository="$RUNNER_TEMP/maven" \
+            :api:publishAllPublicationsToReleaseRepository \
+            :ffmpeg:publishAllPublicationsToReleaseRepository \
+            :ffmpeg-runtime-android:publishAllPublicationsToReleaseRepository \
+            :ffmpeg-runtime-desktop:publishAllPublicationsToReleaseRepository
+          find "$RUNNER_TEMP/maven" -name maven-metadata.xml -delete
+          python3 - "$RUNNER_TEMP/maven" "$VERSION" "$RUNTIME_VERSION" <<'PY'
+          import pathlib, sys, xml.etree.ElementTree as ET
+          root, version, runtime = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+          for artifact, dependency in (("kmedia-bridge-client-android", "kmedia-ffmpeg-runtime-android"), ("kmedia-bridge-client-desktop", "kmedia-ffmpeg-runtime-desktop")):
+              pom = root / "io/github/shusek" / artifact / version / f"{artifact}-{version}.pom"
+              values = [(node.findtext("groupId"), node.findtext("artifactId"), node.findtext("version")) for node in ET.parse(pom).findall(".//dependency")]
+              assert ("io.github.shusek", dependency, runtime) in values, values
+          PY
+          gtar --sort=name --mtime='@${{ needs.readiness.outputs.epoch }}' --owner=0 --group=0 --numeric-owner \
+            -czf "$RUNNER_TEMP/kmedia-bridge-$VERSION-maven-repository.tar.gz" -C "$RUNNER_TEMP" maven
+      - name: Build source, SBOM, SDK and checksum assets
+        run: |
+          python3 scripts/assemble_source_archive.py --version "$VERSION" \
+            --revision '${{ needs.readiness.outputs.revision }}' --epoch '${{ needs.readiness.outputs.epoch }}' \
+            --output "$RUNNER_TEMP/kmedia-bridge-$VERSION-source.tar.gz"
+          python3 scripts/generate_client_sbom.py \
+            --manifest "$RUNNER_TEMP/clients/client-macos-aarch64/manifest.properties" \
+            --version "$VERSION" --runtime-version "$RUNTIME_VERSION" \
+            --output "$RUNNER_TEMP/kmedia-bridge-$VERSION-sbom.cdx.json"
+          for directory in "$RUNNER_TEMP"/clients/client-*; do
+            target="${directory##*/client-}"
+            gtar --sort=name --mtime='@${{ needs.readiness.outputs.epoch }}' --owner=0 --group=0 --numeric-owner \
+              -czf "$RUNNER_TEMP/kmedia-bridge-$VERSION-$target-client-sdk.tar.gz" \
+              -C "$directory" sdk manifest.properties compliance
+          done
+          mkdir "$RUNNER_TEMP/assets"
+          cp "$RUNNER_TEMP"/kmedia-bridge-$VERSION-* "$RUNNER_TEMP/assets/"
+          cp NOTICE THIRD_PARTY_NOTICES.md "$RUNNER_TEMP/assets/"
+          (cd "$RUNNER_TEMP/assets" && shasum -a 256 * > SHA256SUMS)
+      - name: Create immutable GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=(); if [[ "$VERSION" == *-* ]]; then prerelease+=(--prerelease); fi
+          gh release create "v$VERSION" "$RUNNER_TEMP/assets"/* \
+            --target '${{ needs.readiness.outputs.revision }}' \
+            --title "KMediaBridge $VERSION" --generate-notes "${prerelease[@]}"

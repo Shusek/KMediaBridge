@@ -1,217 +1,55 @@
 # KMediaBridge
 
-KMediaBridge is a mixed-license Kotlin Multiplatform media bridge: its Kotlin
-core is internal-use, while its separately replaceable bundled FFmpeg runtime
-remains LGPL-2.1-or-later. It probes local media and losslessly remuxes
-Matroska/WebM, MP4/fMP4, and MPEG-TS into a streamed fragmented-MP4/CMAF
-output. The macOS desktop flavor can additionally decode SDR video, compose a
-selected text subtitle track with libass, or decode explicit
-HDR10/HDR10+/HLG, apply the
-controlled HDR-to-SDR transform, and encode tagged BT.709 CMAF through
-VideoToolbox. The Android runtime exposes the same strict HDR-to-SDR operation
-through MediaCodec.
+KMediaBridge is an optional Kotlin Multiplatform remux and tone-map backend. Since `0.5.0`, it is a **client of** [KMediaFfmpegRuntime](https://github.com/Shusek/KMediaFfmpegRuntime): it no longer builds or distributes a second FFmpeg.
 
-There is no `ffmpeg`/`ffprobe` process and no system FFmpeg prerequisite. The
-runtime artifacts contain dynamically linked native libraries built from the
-pinned FFmpeg source with GPL and nonfree components disabled.
+## Dependency
 
-## Artifacts
-
-Starting with 0.4.0, the Kotlin API and backend are internal-use artifacts.
-All four coordinates are publicly available from Maven Central. Public
-availability does not grant rights beyond the license identified by each
-artifact: the API and backend remain internal-use, while both independently
-replaceable native runtimes remain LGPL:
+Both the platform client and the exact shared runtime are transitive:
 
 ```kotlin
-dependencyResolutionManagement {
-    repositories {
-        mavenCentral()
-    }
-}
-
-kotlin {
-    sourceSets {
-        commonMain.dependencies {
-            implementation("io.github.shusek:kmedia-bridge-api:0.4.2")
-            implementation("io.github.shusek:kmedia-bridge-ffmpeg:0.4.2")
-        }
-        jvmMain.dependencies {
-            // Optional and intentionally separate from the API.
-            runtimeOnly("io.github.shusek:kmedia-bridge-ffmpeg-runtime-desktop:0.4.2")
-        }
-        androidMain.dependencies {
-            // Optional ABI-specific runtime, separate from the Kotlin API.
-            runtimeOnly("io.github.shusek:kmedia-bridge-ffmpeg-runtime-android:0.4.2")
-        }
-    }
+commonMain.dependencies {
+    implementation("io.github.shusek:kmedia-bridge-ffmpeg:0.5.0-rc.1")
 }
 ```
 
-The LGPL runtimes are additionally mirrored to
-`https://shusek.github.io/KMediaBridge/maven` together with historical 0.3.0
-artifacts. Consumers of current releases need only `mavenCentral()`.
-
-- `kmedia-bridge-api` contains engine-neutral KMP models and session contracts.
-- `kmedia-bridge-ffmpeg` contains the common backend plus the desktop JVM
-  loader, compliance checks, typed probe parser, and CMAF fragment stream.
-- `kmedia-bridge-ffmpeg-runtime-desktop` contains FFmpeg 8.1.2 and the C bridge
-  for macOS arm64/x64, Linux x64, and Windows x64.
-- `kmedia-bridge-ffmpeg-runtime-android` contains the reviewed, ABI-specific
-  dynamically linked FFmpeg/MediaCodec payload and its compliance manifest.
-
-Create the desktop backend with:
+The lower-level engine-neutral contracts are available as `io.github.shusek:kmedia-bridge-api:0.5.0-rc.1`. Do not add a native client or `runtimeOnly` dependency manually.
 
 ```kotlin
 val driver = BundledFfmpegNativeDriver.load()
 val bridge = FfmpegMediaBridge.create(driver)
 ```
 
-On Android, select and verify the optional runtime before opening media:
+Android uses `AndroidFfmpegNativeDriver.load()` and supports only `arm64-v8a` and `armeabi-v7a` with `minSdk 23`.
 
-```kotlin
-val driver = AndroidFfmpegNativeDriver.load()
-val bridge = FfmpegMediaBridge.create(driver)
-```
+## Supported native targets
 
-Runtime selection is explicit and typed. The separate runtime artifact is the
-deterministic default; applications may instead use a compatible runtime
-installed outside the application or configure a preference order:
+| Platform | Architectures |
+|---|---|
+| Android | ARM64, ARMv7 |
+| Linux | x86_64, ARM64 |
+| Windows | x86_64 |
+| macOS | ARM64 |
 
-```kotlin
-val driver = BundledFfmpegNativeDriver.load(
-    runtimeSelection = FfmpegRuntimeSelection(
-        policy = FfmpegRuntimePolicy.PREFER_EXTERNAL,
-        externalRuntimeDirectory = Path.of("/opt/kmediabridge/ffmpeg-runtime"),
-    ),
-)
-```
+KMediaBridge is not an iOS backend. Its common API may be consumed by iOS source sets, but no KMediaBridge native client is published there.
 
-Available policies are `BUNDLED_ONLY`, `EXTERNAL_ONLY`, `PREFER_BUNDLED`, and
-`PREFER_EXTERNAL`. Preference fallback occurs only when the preferred source
-has no manifest. A present runtime with a bad hash, incompatible ABI, or an
-identity that differs from its manifest is rejected and never silently
-bypassed.
+## One process, one runtime
 
-An external runtime directory must be a KMediaBridge-compatible dynamic
-library bundle with `manifest.properties`; it is not a system `ffmpeg`
-executable and not an arbitrary set of distro/Homebrew DLLs or dylibs. It may,
-however, use a caller-selected FFmpeg build whose effective license is GPL.
-KMediaBridge verifies the bridge ABI, files, hashes, and reported runtime
-identity, but it does not certify a caller-provided payload for redistribution.
-`driver.runtimeInfo.origin`, `complianceScope`, `ffmpegLicenseSpdx`, and
-`configureArguments` report what was actually selected.
+Before loading the bridge, KMediaBridge initializes `KMediaFfmpegRuntime` and verifies the exact runtime ID recorded when the client was built. A process that already selected another runtime ID fails with a controlled compatibility error. The bridge artifact contains only `libkmediabridge`; FFmpeg, libass, FreeType, FriBidi and HarfBuzz come from the shared runtime.
 
-Capability discovery does not have to load native code. Use
-`DesktopFfmpegRuntimeInspector.inspect()` to validate only the selected
-manifest; the libraries are extracted and loaded only if the player actually
-selects this backend.
+KMediaPlayer may therefore include both its MPV and KMediaBridge adapters. Both clients bind to the same prefixed dynamic-library graph.
 
-For a desktop player that consumes HLS, the JVM adapter owns the bounded
-loopback origin as well:
+## Licensing
 
-```kotlin
-val playback = BundledFfmpegHlsPlaybackBackend.start(
-    FfmpegHlsPlaybackRequest(
-        input = MediaInput("/media/movie.mkv", MediaInputKind.FILE),
-        selectedAudioTrackId = 2,
-        videoOutputPolicy = FfmpegHlsVideoOutputPolicy.FORCE_SDR,
-        // Optional on a subtitle-capable runtime; text is rendered into SDR video.
-        selectedSubtitleTrackId = 3,
-    ),
-)
-player.open(playback.source.playlistUrl)
-// Later:
-playback.close()
-```
+The Kotlin API/backend keep `LicenseRef-KMediaBridge-Internal`. Existing native bridge code and compliance tooling keep their stated `LGPL-2.1-or-later` notices. The shared FFmpeg distribution, corresponding source, patches, SBOM, signatures and relinking instructions are provided by KMediaFfmpegRuntime. Separating that component does not relicense the independent KMediaBridge code.
 
-`playback.source.outputInfo` reports the selected tracks and the requested
-video/audio/subtitle handling. `FORCE_SDR` leaves confirmed SDR compressed
-samples unchanged and selects the strict tone mapper for HDR10/HDR10+/HLG;
-Dolby Vision and ambiguous color descriptions fail closed. `copiedHdrSignal` reports only that a strict
-HEVC Main 10 HDR10/HDR10+/HLG signal was copied into CMAF; it deliberately does
-not claim that a decoder, surface, display, or physical output is HDR.
+Public availability is not a grant beyond the license attached to each artifact. This project is not legal advice.
 
-`BundledFfmpegNativeDriver.load()` extracts the matching libraries into a
-private temporary directory, verifies every SHA-256, loads dependencies in a
-fixed order, and asks the running library for its ABI, version, license, and
-configure line before it accepts media.
-
-The historical 0.3.0 API, backend, and runtime remain at the public Pages
-repository under the LGPL terms conveyed with that release. New internal-use
-core artifacts are published to Maven Central but are never added to the
-runtime-only Pages repository.
-
-## What the bridge does
-
-- probes local, unencrypted files without logging their paths;
-- exposes typed video, audio and subtitle tracks and explicit track selection;
-- streams fMP4 through a native callback with backpressure;
-- serves that stream as bounded-memory CMAF/HLS on loopback for JVM players;
-- copies compatible compressed video/audio without re-encoding the picture;
-- reconstructs monotonic decode timestamps when a Matroska stream carries reordered presentation
-  timestamps without DTS;
-- restarts from a preceding keyframe after seek;
-- preserves codec color and HDR metadata that FFmpeg can carry through this
-  remux path;
-- on supported runtimes, tone-maps explicitly tagged PQ/HLG BT.2020 input to
-  limited-range 8-bit BT.709 and reports `TONE_MAP_TO_SDR` rather than sample copy;
-- on macOS, optionally burns selected ASS/SSA/SRT/WebVTT/mov_text into an SDR
-  BT.709 AVC output using libass plus VideoToolbox.
-
-It does not burn bitmap subtitles, compose subtitles into HDR/HLG/Dolby
-Vision, tone-map Dolby Vision or ambiguous color signals, transcode audio,
-convert Dolby Vision profile 7, handle remote/DRM/live input, or certify Dolby
-Vision. HDR subtitle requests are rejected rather than silently flattened or
-mislabeled. Linux and Windows keep the remux-only flavor until their reviewed
-native encoders are enabled.
-KMediaPlayer still chooses and confirms the actual AVFoundation/Media
-Foundation/GStreamer/rendering path after receiving the fMP4 stream. The Android
-runtime is a separate optional artifact; Apple Kotlin/Native payloads remain
-separate future artifacts.
-
-The FFmpeg dylib/SONAME/DLL names use a private `-kmb` suffix. Native loading is
-local rather than process-global; Darwin additionally uses first-image symbol
-lookup, while ELF builds require private `LIBAV*_KMB_*` symbol versions. This
-lets an in-process libVLC backend coexist without binding to KMediaBridge's
-FFmpeg (or the reverse). Loading both still consumes memory, so KMediaPlayer
-selects one fallback for a request and the manifest-only inspection avoids eager
-loading.
-
-## Mixed license boundary and external runtimes
-
-The first-party Kotlin API and backend are covered by the KMediaBridge Internal
-Use Notice and Limited License. The native bridge, runtime artifact, rebuild
-and relinking material, and compliance tooling are LGPL-2.1-or-later. Native
-libraries are dynamically linked and never committed to Git; release CI builds
-them from the exact pinned source. Each stable release publishes the matching
-source archive, recipes, configure lines, compiler identity, native hashes,
-SBOM, platform bundles, and relinking instructions beside the public runtime
-artifact. See [LICENSE](LICENSE) for the exact scope map.
-
-A user may provide rebuilt libraries without changing KMediaBridge:
-
-```kotlin
-val driver = BundledFfmpegNativeDriver.load(
-    runtimeSelection = FfmpegRuntimeSelection.fromExternalDirectory(
-        Path.of("/path/to/rebuilt/runtime"),
-    ),
-)
-```
-
-The external directory supplies its own `manifest.properties`. Technical
-checks remain fail-closed, but the native-runtime LGPL publication gate does
-not reject a GPL runtime that the caller supplied and KMediaBridge did not
-convey. Such a runtime has `complianceScope == CALLER_PROVIDED`; the application
-author or operator is responsible for determining whether and how the
-resulting combination may be distributed. See [Compliance](docs/COMPLIANCE.md),
-[Relinking](docs/RELINKING.md), and [Architecture](docs/ARCHITECTURE.md).
-
-Run the complete source and publication gate with:
+## Verification
 
 ```shell
 ./gradlew check complianceCheck
 ```
 
-This repository is not legal advice. Redistributors remain responsible for
-patent, export, store, and codec-licensing obligations in their jurisdictions.
+Hosted Actions build and inspect clients and package graphs. Accelerated Android ARM emulator/device tests are recorded as a release attestation and run locally, because the hosted matrix does not provide the required nested virtualization.
+
+See [architecture](docs/ARCHITECTURE.md), [compliance](docs/COMPLIANCE.md), [releasing](docs/RELEASING.md), and [client rebuilding](docs/RELINKING.md).

@@ -18,6 +18,7 @@
 #include <libavutil/mastering_display_metadata.h>
 #include <libavutil/mathematics.h>
 #include <libavutil/pixdesc.h>
+#include <libavutil/time.h>
 #include <libswscale/swscale.h>
 
 #include <errno.h>
@@ -39,6 +40,8 @@
 #define KMB_TONEMAP_TARGET_WHITE_NITS 100.0
 #define KMB_TONEMAP_DEFAULT_SOURCE_PEAK_NITS 1000.0
 #define KMB_TONEMAP_MAX_SOURCE_PEAK_NITS 10000.0
+#define KMB_CODEC_EAGAIN_RETRY_LIMIT 5000
+#define KMB_CODEC_EAGAIN_RETRY_DELAY_US 1000
 
 typedef struct KmbToneMapWriteState {
     KmbWriteCallback callback;
@@ -448,12 +451,15 @@ static KmbResult kmb_tonemap_open_encoder(KmbToneMapPipeline *pipeline, char **o
                 context->color_trc = AVCOL_TRC_BT709;
                 context->colorspace = AVCOL_SPC_BT709;
                 /*
-                 * NVIDIA Shield's Android 11 codecs do not reliably resume after FFmpeg
-                 * generates global AVC headers with a dummy frame followed by MediaCodec.flush().
-                 * The fragmented MP4 muxer uses delay_moov and can derive avcC from the first real
-                 * packet, so the compatibility encoder deliberately avoids that dummy cycle.
+                 * Android MediaCodec encoders, including the official ARM emulator and NVIDIA
+                 * Shield, do not reliably resume after FFmpeg generates global AVC headers with
+                 * a dummy frame followed by MediaCodec.flush(). The fragmented MP4 muxer uses
+                 * delay_moov and derives avcC from the first real packet, so Android deliberately
+                 * avoids that dummy cycle for every selected hardware encoder.
                  */
-                if (encoder_name == NULL) context->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+#if !defined(__ANDROID__)
+                context->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+#endif
                 av_dict_set(&options, "allow_sw", "1", 0);
                 av_dict_set(&options, "realtime", "1", 0);
                 if (encoder_name != NULL) {
@@ -971,6 +977,14 @@ static KmbResult kmb_tonemap_encode_frame(
         KMB_TONEMAP_TRACE("tone-map submitted its first BT.709 frame to the encoder");
     }
     int result = avcodec_send_frame(pipeline->encoder, frame);
+    int retry_count = 0;
+    while (result == AVERROR(EAGAIN) && retry_count++ < KMB_CODEC_EAGAIN_RETRY_LIMIT) {
+        KmbResult bridge_result = kmb_tonemap_write_encoded_packets(pipeline, output_error);
+        if (bridge_result != KMB_OK) return bridge_result;
+        if (pipeline->write_state.cancelled) return KMB_CANCELLED;
+        av_usleep(KMB_CODEC_EAGAIN_RETRY_DELAY_US);
+        result = avcodec_send_frame(pipeline->encoder, frame);
+    }
     if (result < 0) {
         kmb_tonemap_set_av_error(output_error, "Could not submit a tone-mapped frame to the AVC encoder", result);
         return KMB_WRITE_FAILED;
@@ -1020,6 +1034,14 @@ static KmbResult kmb_tonemap_decode_packet(
     char **output_error
 ) {
     int result = avcodec_send_packet(pipeline->decoder, packet);
+    int retry_count = 0;
+    while (result == AVERROR(EAGAIN) && retry_count++ < KMB_CODEC_EAGAIN_RETRY_LIMIT) {
+        KmbResult bridge_result = kmb_tonemap_receive_decoded_frames(pipeline, output_error);
+        if (bridge_result != KMB_OK) return bridge_result;
+        if (pipeline->write_state.cancelled) return KMB_CANCELLED;
+        av_usleep(KMB_CODEC_EAGAIN_RETRY_DELAY_US);
+        result = avcodec_send_packet(pipeline->decoder, packet);
+    }
     if (result < 0) {
         kmb_tonemap_set_av_error(output_error, "Could not submit a compressed HDR video packet", result);
         return KMB_READ_FAILED;

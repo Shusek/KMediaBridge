@@ -8,6 +8,8 @@ import com.sun.jna.Native
 import com.sun.jna.NativeLibrary
 import com.sun.jna.Pointer
 import com.sun.jna.ptr.PointerByReference
+import io.github.shusek.kmediaffmpeg.runtime.KMediaFfmpegRuntime
+import io.github.shusek.kmediaffmpeg.runtime.RuntimeSource as SharedRuntimeSource
 import io.github.shusek.kmediabridge.BridgeCapabilities
 import io.github.shusek.kmediabridge.BridgeOutput
 import io.github.shusek.kmediabridge.MediaBridgeErrorCode
@@ -268,6 +270,11 @@ internal object DesktopRuntimeLoader {
             val source = runtimeSource(platform, replacementDirectory, classLoader, extractionParentDirectory = null)
             val manifest = source.readManifest()
             validateManifestPlatformAndAbi(platform, manifest)
+            KMediaFfmpegRuntime.current().ifPresent { report ->
+                if (report.runtimeId() != manifest.sharedRuntimeId) {
+                    reject("The KMediaBridge client targets a different KMediaFfmpegRuntime ID.")
+                }
+            }
             DesktopFfmpegRuntimeStatus(
                 inspectionLevel = FfmpegRuntimeInspectionLevel.MANIFEST_VALIDATED,
                 origin =
@@ -303,6 +310,13 @@ internal object DesktopRuntimeLoader {
         val source = runtimeSource(platform, replacementDirectory, classLoader, extractionParentDirectory)
         val manifest = source.readManifest()
         validateManifestPlatformAndAbi(platform, manifest)
+        val sharedRuntime =
+            KMediaFfmpegRuntime.current().orElseGet {
+                KMediaFfmpegRuntime.initialize(SharedRuntimeSource.bundled())
+            }
+        if (sharedRuntime.runtimeId() != manifest.sharedRuntimeId) {
+            reject("The KMediaBridge client targets a different KMediaFfmpegRuntime ID.")
+        }
 
         val directory = source.materialize(manifest)
         val resolvedLibraries = verifyLibraries(directory, manifest)
@@ -341,7 +355,7 @@ internal object DesktopRuntimeLoader {
         val actualLicense = api.borrowedString(api.kmb_ffmpeg_license())
         val actualConfiguration = api.borrowedString(api.kmb_ffmpeg_configuration())
         val actualFeatures = api.borrowedString(api.kmb_runtime_features_json())
-        if (actualVersion != manifest.ffmpegVersion) {
+        if (actualVersion != manifest.ffmpegVersion || actualVersion != sharedRuntime.componentVersions()["ffmpeg"]) {
             reject("The loaded FFmpeg version does not match the signed runtime manifest.")
         }
         if (actualLicense != manifest.ffmpegReportedLicense) {
@@ -374,6 +388,8 @@ internal object DesktopRuntimeLoader {
                     } else {
                         FfmpegRuntimeOrigin.EXTERNAL_DIRECTORY
                     },
+                sharedRuntimeId = sharedRuntime.runtimeId(),
+                sharedRuntimeConfigurationSha256 = sharedRuntime.configurationSha256(),
             )
         FfmpegComplianceVerifier.requireAllowedByDistributionPolicy(runtimeInfo)
         return LoadedFfmpegRuntime(
@@ -602,6 +618,7 @@ private data class NativeLibraryEntry(
 private data class NativePayloadManifest(
     val platform: String,
     val abiVersion: Int,
+    val sharedRuntimeId: String,
     val ffmpegVersion: String,
     val ffmpegLicenseSpdx: String,
     val ffmpegReportedLicense: String,
@@ -729,19 +746,22 @@ private data class NativePayloadManifest(
             ) {
                 DesktopRuntimeLoader.run { reject("The native manifest has an inconsistent runtime flavor.") }
             }
-            val expectedSubtitleComponents =
-                setOf("FreeType", "FriBidi library", "HarfBuzz", "libunibreak", "libass")
-            if (subtitleFlavor && linkedComponents.map(NativeComponentInfo::name).toSet() != expectedSubtitleComponents) {
-                DesktopRuntimeLoader.run { reject("The subtitle runtime does not declare the reviewed component set.") }
-            }
-            if (!subtitleFlavor && linkedComponents.isNotEmpty()) {
-                DesktopRuntimeLoader.run { reject("The remux-only runtime unexpectedly declares linked subtitle components.") }
+            if (linkedComponents.isNotEmpty()) {
+                DesktopRuntimeLoader.run {
+                    reject("The bridge client must not embed components owned by KMediaFfmpegRuntime.")
+                }
             }
             return NativePayloadManifest(
                 platform = required("platform"),
                 abiVersion =
                     required("abiVersion").toIntOrNull()
                         ?: DesktopRuntimeLoader.run { reject("The native manifest ABI is invalid.") },
+                sharedRuntimeId =
+                    required("sharedRuntimeId").also { value ->
+                        if (!value.matches(Regex("kmediaffmpeg-8\\.1\\.2-ass-0\\.17\\.4-[0-9a-f]{16}"))) {
+                            DesktopRuntimeLoader.run { reject("The native manifest has an invalid shared runtime ID.") }
+                        }
+                    },
                 ffmpegVersion = required("ffmpegVersion"),
                 ffmpegLicenseSpdx = required("ffmpegLicenseSpdx"),
                 ffmpegReportedLicense = required("ffmpegReportedLicense"),
