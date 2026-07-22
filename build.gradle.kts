@@ -12,7 +12,7 @@ plugins {
     alias(libs.plugins.ktlint)
 }
 
-val publicationVersion = providers.gradleProperty("publicationVersion").orElse("0.4.2-SNAPSHOT")
+val publicationVersion = providers.gradleProperty("publicationVersion").orElse("0.5.0-SNAPSHOT")
 val pythonExecutable = if (System.getProperty("os.name").startsWith("Windows")) "python" else "python3"
 
 allprojects {
@@ -20,172 +20,44 @@ allprojects {
     version = publicationVersion.get()
 }
 
-ktlint {
-    version.set("1.7.1")
-}
-
-val complianceOutput = layout.buildDirectory.file("reports/compliance/sbom.cdx.json")
-val internalCoreComplianceRepository = layout.buildDirectory.dir("internal-core-compliance-repository")
-val runtimeComplianceRepository = layout.buildDirectory.dir("runtime-compliance-repository")
-val desktopNativePayloadDirectory =
-    providers
-        .gradleProperty("desktopNativePayloadDirectory")
-        .orElse(providers.gradleProperty("nativePayloadDirectory"))
-val androidNativePayloadDirectory = providers.gradleProperty("androidNativePayloadDirectory")
-
-val cleanComplianceRepositories =
-    tasks.register<Delete>("cleanComplianceRepositories") {
-        group = "verification"
-        description = "Removes stale staged Maven snapshots before compliance publication."
-        delete(internalCoreComplianceRepository, runtimeComplianceRepository)
-    }
-
-subprojects {
-    tasks
-        .matching {
-            it.name.startsWith("publish") &&
-                (
-                    it.name.endsWith("PublicationToInternalCoreComplianceRepository") ||
-                        it.name.endsWith("PublicationToRuntimeComplianceRepository")
-                )
-        }.configureEach {
-            dependsOn(cleanComplianceRepositories)
-        }
-}
-
-val generateComplianceSbom =
-    tasks.register<Exec>("generateComplianceSbom") {
-        group = "compliance"
-        description = "Generates the checked-in distribution SBOM from declared components."
-        inputs.files(
-            layout.projectDirectory.file("compliance/ffmpeg/manifest.json"),
-            layout.projectDirectory.file("gradle/libs.versions.toml"),
-            layout.projectDirectory.file("scripts/generate_sbom.py"),
-        )
-        desktopNativePayloadDirectory.orNull?.let { inputs.dir(it) }
-        androidNativePayloadDirectory.orNull?.let { inputs.dir(it) }
-        outputs.file(complianceOutput)
-        val arguments =
-            mutableListOf(
-                pythonExecutable,
-                "scripts/generate_sbom.py",
-                "--output",
-                complianceOutput.get().asFile.absolutePath,
-                "--version",
-                publicationVersion.get(),
-            )
-        desktopNativePayloadDirectory.orNull?.let { directory ->
-            arguments += listOf("--runtime-resources", directory)
-        }
-        androidNativePayloadDirectory.orNull?.let { directory ->
-            arguments += listOf("--android-runtime", directory)
-        }
-        commandLine(arguments)
-    }
+ktlint { version.set("1.7.1") }
 
 val verifyCompliance =
     tasks.register<Exec>("verifyCompliance") {
         group = "verification"
-        description = "Fails closed when licensing or FFmpeg source-offer evidence is incomplete."
+        description = "Verifies the shared-runtime client boundary and publication policy."
         inputs.files(
             fileTree("api/src"),
             fileTree("ffmpeg/src"),
             fileTree("ffmpeg-runtime-desktop/src"),
             fileTree("ffmpeg-runtime-android/src"),
             fileTree("native"),
-            fileTree("scripts") {
-                exclude("__pycache__/**")
-            },
-            fileTree("compliance"),
+            fileTree("scripts") { exclude("__pycache__/**") },
             fileTree(".github/workflows"),
             fileTree("LICENSES"),
             layout.projectDirectory.file("build.gradle.kts"),
             layout.projectDirectory.file("settings.gradle.kts"),
-            layout.projectDirectory.file("api/build.gradle.kts"),
-            layout.projectDirectory.file("ffmpeg/build.gradle.kts"),
-            layout.projectDirectory.file("ffmpeg-runtime-desktop/build.gradle.kts"),
-            layout.projectDirectory.file("ffmpeg-runtime-android/build.gradle.kts"),
-            layout.projectDirectory.file("gradle/libs.versions.toml"),
-            layout.projectDirectory.file("gradle/wrapper/gradle-wrapper.jar"),
-            layout.projectDirectory.file("gradle/wrapper/LICENSE"),
             layout.projectDirectory.file("LICENSE"),
             layout.projectDirectory.file("NOTICE"),
             layout.projectDirectory.file("THIRD_PARTY_NOTICES.md"),
         )
-        commandLine(
-            pythonExecutable,
-            "scripts/verify_compliance.py",
-            "--root",
-            layout.projectDirectory.asFile.absolutePath,
-        )
+        commandLine(pythonExecutable, "scripts/verify_compliance.py", "--root", layout.projectDirectory.asFile.absolutePath)
     }
 
-val testRuntimeInspectionLogic =
-    tasks.register<Exec>("testRuntimeInspectionLogic") {
+val testScripts =
+    tasks.register<Exec>("testScripts") {
         group = "verification"
-        description = "Runs regression tests for native runtime dependency inspection."
-        inputs.files(
-            layout.projectDirectory.file("scripts/inspect_native_runtime.py"),
-            layout.projectDirectory.file("scripts/test_inspect_native_runtime.py"),
-        )
-        commandLine(
-            pythonExecutable,
-            "-m",
-            "unittest",
-            "discover",
-            "-s",
-            "scripts",
-            "-p",
-            "test_*.py",
-        )
-    }
-
-val verifyPublications =
-    tasks.register<Exec>("verifyPublications") {
-        group = "verification"
-        description = "Verifies the internal-use core and LGPL runtime publication boundaries."
-        dependsOn(
-            ":api:publishAllPublicationsToInternalCoreComplianceRepository",
-            ":ffmpeg:publishAllPublicationsToInternalCoreComplianceRepository",
-            ":ffmpeg-runtime-desktop:publishAllPublicationsToRuntimeComplianceRepository",
-            ":ffmpeg-runtime-android:publishAllPublicationsToRuntimeComplianceRepository",
-        )
-        inputs.dir(layout.buildDirectory.dir("internal-core-compliance-repository"))
-        inputs.dir(layout.buildDirectory.dir("runtime-compliance-repository"))
-        commandLine(
-            pythonExecutable,
-            "scripts/verify_publications.py",
-            "--internal-core-repository",
-            layout.buildDirectory
-                .dir("internal-core-compliance-repository")
-                .get()
-                .asFile.absolutePath,
-            "--runtime-repository",
-            layout.buildDirectory
-                .dir("runtime-compliance-repository")
-                .get()
-                .asFile.absolutePath,
-            "--version",
-            publicationVersion.get(),
-        )
+        description = "Runs client packaging and native inspection regression tests."
+        inputs.files(fileTree("scripts") { include("*.py"); exclude("__pycache__/**") })
+        commandLine(pythonExecutable, "-m", "unittest", "discover", "-s", "scripts", "-p", "test_*.py")
     }
 
 tasks.named("check") {
-    dependsOn(
-        ":api:check",
-        ":ffmpeg:check",
-        ":ffmpeg-runtime-desktop:check",
-        ":ffmpeg-runtime-android:check",
-    )
-    dependsOn(verifyCompliance)
-    dependsOn(generateComplianceSbom)
-    dependsOn(testRuntimeInspectionLogic)
+    dependsOn(":api:check", ":ffmpeg:check", ":ffmpeg-runtime-desktop:check", ":ffmpeg-runtime-android:check")
+    dependsOn(verifyCompliance, testScripts)
 }
 
 tasks.register("complianceCheck") {
     group = "verification"
-    dependsOn(verifyCompliance)
-    dependsOn(verifyPublications)
-    dependsOn(generateComplianceSbom)
-    dependsOn(testRuntimeInspectionLogic)
+    dependsOn(verifyCompliance, testScripts)
 }

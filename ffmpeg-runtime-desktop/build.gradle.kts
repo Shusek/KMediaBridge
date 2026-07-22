@@ -1,24 +1,65 @@
-// SPDX-License-Identifier: LGPL-2.1-or-later
+// SPDX-License-Identifier: LicenseRef-KMediaBridge-Internal
+
+import org.gradle.api.DefaultTask
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.tasks.InputFile
+import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.Optional
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.TaskAction
+
+abstract class VerifyDesktopClientPayload : DefaultTask() {
+    @get:Optional
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val payload: DirectoryProperty
+
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val verifier: RegularFileProperty
+
+    @TaskAction
+    fun verify() {
+        if (!payload.isPresent) return
+        val python = if (System.getProperty("os.name").startsWith("Windows")) "python" else "python3"
+        val status =
+            ProcessBuilder(
+                python,
+                verifier.get().asFile.absolutePath,
+                "--resources",
+                payload.get().asFile.absolutePath,
+            ).inheritIO().start().waitFor()
+        require(status == 0) { "Desktop KMediaBridge client payload verification failed." }
+    }
+}
 
 plugins {
     `java-library`
     alias(libs.plugins.vanniktech.maven.publish)
 }
 
+val ffmpegRuntimeVersion = "0.1.0-rc.2"
+val nativePayload =
+    providers
+        .gradleProperty("kmediaBridgeDesktopNativePayloadDirectory")
+        .orElse(providers.gradleProperty("desktopNativePayloadDirectory"))
+        .map(rootProject::file)
+
 java {
     toolchain.languageVersion.set(JavaLanguageVersion.of(17))
     withSourcesJar()
 }
 
-val nativePayloadDirectory =
-    providers
-        .gradleProperty("desktopNativePayloadDirectory")
-        .orElse(providers.gradleProperty("nativePayloadDirectory"))
-
-sourceSets {
-    main {
-        nativePayloadDirectory.orNull?.let { resources.srcDir(rootProject.file(it)) }
+dependencies {
+    api("io.github.shusek:kmedia-ffmpeg-runtime-desktop:$ffmpegRuntimeVersion") {
+        version { strictly(ffmpegRuntimeVersion) }
     }
+}
+
+sourceSets.main {
+    nativePayload.orNull?.let { resources.srcDir(it) }
 }
 
 tasks.withType<Jar>().configureEach {
@@ -26,81 +67,54 @@ tasks.withType<Jar>().configureEach {
     isReproducibleFileOrder = true
 }
 
-tasks.named<Jar>("sourcesJar") {
-    // The runtime payload is a main resource, not source material. Gradle's
-    // sources JAR otherwise inherits it through SourceSet.allSource and would
-    // publish a second, misleading copy of every native library.
-    exclude("META-INF/kmediabridge/native/**")
-}
+tasks.named<Jar>("sourcesJar") { exclude("META-INF/kmediabridge/native/**") }
 
 tasks.named<ProcessResources>("processResources") {
-    from(
-        rootProject.layout.projectDirectory
-            .file("LICENSES/LGPL-2.1-or-later.txt"),
-    ) {
-        into("META-INF")
-        rename { "LICENSE" }
-    }
-    from(rootProject.layout.projectDirectory.file("THIRD_PARTY_NOTICES.md")) {
-        into("META-INF")
-    }
+    from(rootProject.layout.projectDirectory.file("LICENSE")) { into("META-INF") }
 }
 
-publishing {
-    repositories {
+val verifyNativePayload =
+    tasks.register<VerifyDesktopClientPayload>("verifyNativePayload") {
+        payload.set(layout.dir(nativePayload))
+        verifier.set(rootProject.layout.projectDirectory.file("scripts/verify_client_resources.py"))
+    }
+
+tasks.named("check") { dependsOn(verifyNativePayload) }
+tasks.matching { it.name.startsWith("publish", ignoreCase = true) }.configureEach {
+    dependsOn(verifyNativePayload)
+    doFirst { require(nativePayload.isPresent) { "Publishing requires -PkmediaBridgeDesktopNativePayloadDirectory." } }
+}
+
+publishing.repositories {
+    rootProject.providers.gradleProperty("releaseRepository").orNull?.let { repositoryPath ->
         maven {
-            name = "runtimeCompliance"
-            url =
-                rootProject.layout.buildDirectory
-                    .dir("runtime-compliance-repository")
-                    .get()
-                    .asFile
-                    .toURI()
+            name = "release"
+            url = uri(repositoryPath)
         }
-        rootProject.providers.gradleProperty("githubPagesMavenRepository").orNull?.let { repositoryPath ->
-            maven {
-                name = "githubPages"
-                url = uri(repositoryPath)
-            }
-        }
+    }
+    maven {
+        name = "runtimeCompliance"
+        url = rootProject.layout.buildDirectory.dir("runtime-compliance-repository").get().asFile.toURI()
     }
 }
 
 mavenPublishing {
-    coordinates(
-        groupId = "io.github.shusek",
-        artifactId = "kmedia-bridge-ffmpeg-runtime-desktop",
-        version = project.version.toString(),
-    )
-
+    coordinates("io.github.shusek", "kmedia-bridge-client-desktop", project.version.toString())
     pom {
-        name.set("KMediaBridge Bundled FFmpeg Runtime for Desktop")
-        description.set("Optional dynamically linked LGPL FFmpeg runtime for KMediaBridge on desktop JVM.")
+        name.set("KMediaBridge Native Client for Desktop")
+        description.set("Private KMediaBridge JNA client linked to the shared KMediaFfmpegRuntime ABI.")
         inceptionYear.set("2026")
         url.set("https://github.com/Shusek/KMediaBridge")
-
         licenses {
             license {
-                name.set("GNU Lesser General Public License v2.1 or later")
-                url.set("https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html")
+                name.set("KMediaBridge Internal Use Notice and Limited License")
+                url.set("https://github.com/Shusek/KMediaBridge/blob/main/LICENSES/LicenseRef-KMediaBridge-Internal.txt")
                 distribution.set("repo")
             }
         }
-        developers {
-            developer {
-                id.set("Shusek")
-                name.set("Shusek")
-            }
-        }
-        scm {
-            connection.set("scm:git:https://github.com/Shusek/KMediaBridge.git")
-            developerConnection.set("scm:git:ssh://git@github.com/Shusek/KMediaBridge.git")
-            url.set("https://github.com/Shusek/KMediaBridge")
-        }
+        developers { developer { id.set("Shusek"); name.set("Shusek") } }
+        scm { url.set("https://github.com/Shusek/KMediaBridge") }
     }
-
     publishToMavenCentral()
-    if (providers.gradleProperty("signingInMemoryKey").isPresent) {
-        signAllPublications()
-    }
+    if (providers.gradleProperty("signingInMemoryKey").isPresent) signAllPublications()
 }

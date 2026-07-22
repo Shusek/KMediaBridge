@@ -11,13 +11,15 @@ plugins {
     alias(libs.plugins.ktlint)
 }
 
+val ffmpegRuntimeVersion = "0.1.0-rc.2"
+
 kotlin {
     explicitApi()
     jvmToolchain(17)
 
     android {
         namespace = "io.github.shusek.kmediabridge.ffmpeg"
-        compileSdk = 36
+        compileSdk = 37
         minSdk = 23
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
@@ -38,8 +40,6 @@ kotlin {
     iosArm64()
     iosSimulatorArm64()
     macosArm64()
-    @Suppress("DEPRECATION")
-    macosX64()
     linuxX64()
     linuxArm64()
     mingwX64()
@@ -65,15 +65,22 @@ kotlin {
             }
         androidMain.get().dependsOn(jvmAndroidMain)
         jvmMain.get().dependsOn(jvmAndroidMain)
+        androidMain.dependencies {
+            api(project(":ffmpeg-runtime-android"))
+            api("io.github.shusek:kmedia-ffmpeg-runtime-android:$ffmpegRuntimeVersion") {
+                version { strictly(ffmpegRuntimeVersion) }
+            }
+        }
+        jvmMain.dependencies {
+            api(project(":ffmpeg-runtime-desktop"))
+            api("io.github.shusek:kmedia-ffmpeg-runtime-desktop:$ffmpegRuntimeVersion") {
+                version { strictly(ffmpegRuntimeVersion) }
+            }
+            implementation(libs.jna)
+        }
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
-        }
-        jvmMain.dependencies {
-            implementation(libs.jna)
-        }
-        jvmTest.dependencies {
-            runtimeOnly(project(":ffmpeg-runtime-desktop"))
         }
     }
 }
@@ -82,10 +89,22 @@ tasks.withType<Test>().configureEach {
     providers.gradleProperty("kmediaBridgeTestMedia").orNull?.let { mediaPath ->
         systemProperty("kmediabridge.testMedia", mediaPath)
     }
+    providers.gradleProperty("kmediaBridgeTestRuntimeSdk").orNull?.let { runtimeSdk ->
+        systemProperty("kmediabridge.testRuntimeSdk", runtimeSdk)
+    }
+    providers.gradleProperty("kmediaBridgeTestClientOutput").orNull?.let { clientOutput ->
+        systemProperty("kmediabridge.testClientOutput", clientOutput)
+    }
 }
 
 publishing {
     repositories {
+        rootProject.providers.gradleProperty("releaseRepository").orNull?.let { repositoryPath ->
+            maven {
+                name = "release"
+                url = uri(repositoryPath)
+            }
+        }
         maven {
             name = "internalCoreCompliance"
             url =

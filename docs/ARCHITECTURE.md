@@ -1,85 +1,16 @@
 # Architecture
 
-## Boundary
+`kmedia-bridge-api` contains engine-neutral contracts. `kmedia-bridge-ffmpeg` contains the optional Kotlin backend and transitively selects one platform client:
 
 ```text
-application / KMediaPlayer
-        |
-        v
-kmedia-bridge-api (Kotlin Multiplatform, internal-use license)
-        |
-        v
-kmedia-bridge-ffmpeg (runtime policy + orchestration, internal-use license)
-        |
-        v
-versioned C ABI: kmedia_bridge.h (LGPL-2.1-or-later)
-        |
-        v
-dynamically linked FFmpeg libraries (LGPL-2.1-or-later)
-
-kmedia-bridge-ffmpeg-runtime-desktop (public LGPL runtimeOnly resources)
-        |
-        +-- macOS arm64/x64 dylibs
-        +-- Linux x64 shared objects
-        +-- Windows x64 DLLs
-
-kmedia-bridge-ffmpeg-runtime-android (public LGPL runtimeOnly AAR)
-        |
-        +-- arm64-v8a shared objects
-        +-- armeabi-v7a shared objects
-        +-- x86_64 shared objects
+kmedia-bridge-ffmpeg
+├── kmedia-bridge-client-android  ─┐
+├── kmedia-bridge-client-desktop  ─┼─ exact KMediaFfmpegRuntime 0.1.0-rc.2
+└── kmedia-bridge-api             ─┘
 ```
 
-The Kotlin API is engine-neutral. FFmpeg types, pointers, command-line syntax,
-and ABI details never appear in application-facing contracts.
+The Android client AAR contains one `libkmediabridge.so` for each supported ARM ABI. The desktop client JAR contains one bridge library for Linux x86_64/ARM64, Windows x86_64 and macOS ARM64. It contains no FFmpeg-family libraries.
 
-## Runtime rules
+The shared runtime is initialized first. Its process-global runtime ID is compared with `sharedRuntimeId` in the client manifest before native client loading. The loader verifies the platform, bridge ABI, closed library inventory and SHA-256. Shared libraries use prefixed names supplied only by KMediaFfmpegRuntime.
 
-- No application code invokes an FFmpeg executable.
-- Runtime source selection is typed: bundled only, external only, or an
-  explicit preference order between them.
-- An external runtime is a KMediaBridge-compatible directory with the native
-  bridge, FFmpeg libraries, and a verified manifest. Arbitrary system libraries
-  are not discovered or trusted implicitly.
-- The native runtime exposes a small versioned C ABI.
-- Desktop JVM calls that ABI through JNA; Android calls it through a narrow JNI
-  adapter. Neither platform invokes a program.
-- Native libraries are dynamically linked to keep the LGPL replacement and
-  relinking boundary explicit.
-- Input locators are never included in diagnostic strings because URLs may
-  contain credentials.
-- A bundled runtime refuses non-LGPL builds before opening media because
-  KMediaBridge conveys that payload.
-- A caller-provided external runtime may be GPL. It still passes fail-closed
-  technical verification but is reported as `CALLER_PROVIDED`; KMediaBridge
-  makes no claim that an application linked to it is distributable under the
-  application's chosen license.
-- Encrypted media and DRM are outside the conversion bridge.
-
-## Platform strategy
-
-- **macOS JVM:** bundled arm64/x64 `.dylib`; AVFoundation receives copied
-  CMAF/fMP4, or an explicitly selected SDR text subtitle is composed by libass
-  and encoded as AVC with VideoToolbox.
-- **Windows JVM:** bundled x64 `.dll`; Media Foundation remains the primary decoder
-  and D3D renderer.
-- **Android:** Media3 remains primary; the optional FFmpeg/MediaCodec runtime
-  probes and remuxes local containers or performs explicitly requested,
-  controlled HDR10/HDR10+/HLG-to-SDR conversion.
-- **iOS:** dynamic framework/XCFramework with Kotlin/Native interop.
-- **Linux JVM:** bundled x64 `.so`; system GStreamer remains the confirmed HDR
-  display route and this bridge is an optional container fallback.
-- **Wasm:** the API is available, but no full FFmpeg.wasm payload is promised.
-
-## Current native ABI
-
-ABI version 4 exposes runtime identity, an authenticated feature declaration, a
-typed probe JSON document (including audio, subtitle, color, HDR10+, and Dolby
-Vision metadata), a file remux operation, a track-selecting callback-based
-fragmented-MP4 stream, optional SDR subtitle composition, and controlled
-HDR-to-SDR conversion. The callback supports backpressure and cancellation.
-Remux-only builds never decode the picture. Subtitle-capable macOS builds
-decode, compose in libass, normalize to limited BT.709, and encode AVC with
-VideoToolbox. Android uses MediaCodec where available, runs the shared linear
-BT.2020 color transform, and emits tagged limited-range BT.709 AVC. Dolby
-Vision and ambiguous color signals fail closed.
+Linux clients use `$ORIGIN`, macOS uses `@rpath`, and Windows loads the shared runtime DLLs before the bridge DLL. Client and runtime SDKs are immutable release artifacts; the build accepts an SDK directory and never fetches a Git submodule.

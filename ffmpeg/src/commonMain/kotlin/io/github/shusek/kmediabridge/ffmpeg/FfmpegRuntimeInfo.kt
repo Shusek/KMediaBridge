@@ -39,6 +39,8 @@ public data class FfmpegRuntimeInfo(
     public val dynamicLinkingVerified: Boolean,
     public val linkedComponents: List<NativeComponentInfo> = emptyList(),
     public val origin: FfmpegRuntimeOrigin = FfmpegRuntimeOrigin.BUNDLED,
+    public val sharedRuntimeId: String = "",
+    public val sharedRuntimeConfigurationSha256: String = "",
 ) {
     /**
      * Bundled payloads are covered by the native runtime's fail-closed LGPL

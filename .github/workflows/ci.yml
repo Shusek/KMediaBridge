@@ -3,225 +3,90 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
-  workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
 
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 env:
-  ANDROID_NDK_VERSION: 29.0.14206865
-  ANDROID_CI_ABIS: arm64-v8a
+  RUNTIME_VERSION: 0.1.0-rc.2
 
 jobs:
-  kotlin:
-    name: Kotlin (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            gradle: ./gradlew
-          - os: macos-14
-            gradle: ./gradlew
-          - os: windows-latest
-            gradle: ./gradlew.bat
-    steps:
-      - name: Check out source
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - name: Set up Java
-        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
-        with:
-          distribution: temurin
-          java-version: "17"
-          cache: gradle
-      - name: Run Kotlin Multiplatform checks
-        if: runner.os != 'Windows'
-        run: ${{ matrix.gradle }} --no-daemon check
-      # KGP 2.4.x can require build/wasm/yarn.lock from kotlinWasmStoreYarnLock
-      # on a clean Windows runner even when an empty lockfile is intentionally
-      # not generated (KT-82693). Web/Wasm remains covered by Linux and macOS.
-      - name: Run Windows target checks
-        if: runner.os == 'Windows'
-        run: >-
-          ${{ matrix.gradle }} --no-daemon
-          verifyCompliance
-          testRuntimeInspectionLogic
-          ktlintCheck
-          :api:jvmTest
-          :ffmpeg:jvmTest
-          :api:testAndroidHostTest
-          :ffmpeg:testAndroidHostTest
-          :api:mingwX64Test
-          :ffmpeg:mingwX64Test
-
-  publications:
-    name: Publications and compliance
-    runs-on: macos-14
-    steps:
-      - name: Check out source
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - name: Set up Java
-        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
-        with:
-          distribution: temurin
-          java-version: "17"
-          cache: gradle
-      - name: Set up Android SDK command-line tools
-        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
-        with:
-          packages: ""
-      - name: Install the Android platform used by the runtime AAR
-        run: sdkmanager "platforms;android-36"
-      - name: Verify staged Maven publications
-        run: ./gradlew --no-daemon complianceCheck -PpublicationVersion=0.4.2-CI
-
-  native-lgpl:
-    name: Native LGPL runtime (${{ matrix.platform }})
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: linux-x86_64
-            runner: ubuntu-24.04
-            build: ./native/build-ffmpeg-unix.sh
-            runnable: true
-          - platform: macos-aarch64
-            runner: macos-15
-            build: ./native/build-ffmpeg-unix.sh
-            runnable: true
-          - platform: macos-x86_64
-            runner: macos-15-intel
-            build: ./native/build-ffmpeg-unix.sh
-            runnable: true
-          - platform: windows-x86_64
-            runner: ubuntu-24.04
-            build: ./native/build-ffmpeg-windows-x64.sh
-            runnable: false
-    steps:
-      - name: Check out source
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - name: Install the Windows cross toolchain
-        if: matrix.platform == 'windows-x86_64'
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes gcc-mingw-w64-x86-64 gnupg
-      - name: Install GnuPG on Linux
-        if: matrix.platform == 'linux-x86_64'
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes gnupg
-      - name: Install signed-source and subtitle build tools on macOS
-        if: startsWith(matrix.platform, 'macos-')
-        run: brew install gnupg meson ninja pkgconf
-      - name: Verify the signed FFmpeg source release
-        shell: bash
-        run: |
-          mkdir -p "$RUNNER_TEMP/native-work"
-          curl --fail --location --proto '=https' --tlsv1.2 \
-            --output "$RUNNER_TEMP/native-work/ffmpeg-8.1.2.tar.xz" \
-            https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz
-          curl --fail --location --proto '=https' --tlsv1.2 \
-            --output "$RUNNER_TEMP/ffmpeg-8.1.2.tar.xz.asc" \
-            https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz.asc
-          curl --fail --location --proto '=https' --tlsv1.2 \
-            --output "$RUNNER_TEMP/ffmpeg-devel.asc" \
-            https://ffmpeg.org/ffmpeg-devel.asc
-          ./scripts/verify_ffmpeg_release.sh \
-            "$RUNNER_TEMP/native-work/ffmpeg-8.1.2.tar.xz" \
-            "$RUNNER_TEMP/ffmpeg-8.1.2.tar.xz.asc" \
-            "$RUNNER_TEMP/ffmpeg-devel.asc"
-      - name: Build and inspect the native runtime
-        shell: bash
-        run: |
-          if [[ "${{ matrix.platform }}" == macos-* ]]; then
-            ./native/build-ffmpeg-unix.sh \
-              "$RUNNER_TEMP/native-work" "$RUNNER_TEMP/native-dist" subtitle-sdr
-          else
-            ${{ matrix.build }} "$RUNNER_TEMP/native-work" "$RUNNER_TEMP/native-dist"
-          fi
-      - name: Package classpath runtime resources
-        run: >-
-          python3 scripts/package_native_runtime.py
-          --dist "$RUNNER_TEMP/native-dist"
-          --platform "${{ matrix.platform }}"
-          --resources "$RUNNER_TEMP/native-resources"
-          --release-version 0.4.2-CI
-          --revision "${{ github.sha }}"
-      - name: Set up Java for the JVM integration test
-        if: matrix.runnable
-        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
-        with:
-          distribution: temurin
-          java-version: "17"
-          cache: gradle
-      - name: Load, probe, and stream through the packaged runtime
-        if: matrix.runnable
-        run: >-
-          ./gradlew --no-daemon :ffmpeg:jvmTest
-          -PnativePayloadDirectory="$RUNNER_TEMP/native-resources"
-
-  native-android:
-    name: Native LGPL runtime (Android arm64)
+  source:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-      - name: Check out source
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - name: Set up Java
-        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - name: Verify the client-only source boundary
+        run: |
+          python3 -m compileall -q native scripts
+          python3 scripts/verify_compliance.py --root .
+          python3 -m unittest discover -s scripts -p 'test_*.py'
+
+  client:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: macos-aarch64, runner: macos-15, shell: bash }
+          - { target: android-arm64-v8a, runner: ubuntu-24.04, shell: bash }
+          - { target: android-armeabi-v7a, runner: ubuntu-24.04, shell: bash }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: '17'
           cache: gradle
-      - name: Set up Android SDK command-line tools
-        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
-        with:
-          packages: ""
-      - name: Install native verification tools and the pinned Android NDK
-        shell: bash
+      - name: Install Android NDK
+        if: startsWith(matrix.target, 'android-')
+        run: /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager 'ndk;29.0.14206865'
+      - name: Download and verify the public shared-runtime SDK and Maven repository
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes gnupg
-          sdkmanager "platforms;android-36" "ndk;$ANDROID_NDK_VERSION"
-      - name: Verify the signed FFmpeg source release
-        shell: bash
+          sdk="kmedia-ffmpeg-runtime-$RUNTIME_VERSION-${{ matrix.target }}-sdk.tar.gz"
+          maven="kmedia-ffmpeg-runtime-$RUNTIME_VERSION-maven-repository.tar.gz"
+          mkdir "$RUNNER_TEMP/runtime" "$RUNNER_TEMP/runtime-maven"
+          gh release download "v$RUNTIME_VERSION" -R Shusek/KMediaFfmpegRuntime \
+            --dir "$RUNNER_TEMP/runtime" --pattern "$sdk" --pattern "$maven" --pattern SHA256SUMS
+          for name in "$sdk" "$maven"; do
+            expected="$(awk -v p="$name" '$2 == p || $2 == "./" p {print $1}' "$RUNNER_TEMP/runtime/SHA256SUMS")"
+            [[ "$expected" =~ ^[0-9a-f]{64}$ ]]
+            actual="$(python3 -c 'import hashlib,sys; h=hashlib.sha256(); f=open(sys.argv[1],"rb"); [h.update(b) for b in iter(lambda:f.read(1048576),b"")]; print(h.hexdigest())' "$RUNNER_TEMP/runtime/$name")"
+            test "$actual" = "$expected"
+          done
+          tar -xzf "$RUNNER_TEMP/runtime/$sdk" -C "$RUNNER_TEMP/runtime"
+          tar -xzf "$RUNNER_TEMP/runtime/$maven" -C "$RUNNER_TEMP/runtime-maven"
+      - name: Build and inspect the bridge client only
         run: |
-          mkdir -p "$RUNNER_TEMP/android-work"
-          curl --fail --location --proto '=https' --tlsv1.2 \
-            --output "$RUNNER_TEMP/android-work/ffmpeg-8.1.2.tar.xz" \
-            https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz
-          curl --fail --location --proto '=https' --tlsv1.2 \
-            --output "$RUNNER_TEMP/ffmpeg-8.1.2.tar.xz.asc" \
-            https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz.asc
-          curl --fail --location --proto '=https' --tlsv1.2 \
-            --output "$RUNNER_TEMP/ffmpeg-devel.asc" \
-            https://ffmpeg.org/ffmpeg-devel.asc
-          ./scripts/verify_ffmpeg_release.sh \
-            "$RUNNER_TEMP/android-work/ffmpeg-8.1.2.tar.xz" \
-            "$RUNNER_TEMP/ffmpeg-8.1.2.tar.xz.asc" \
-            "$RUNNER_TEMP/ffmpeg-devel.asc"
-      - name: Build and inspect the Android runtime
-        shell: bash
-        run: >-
-          ./native/build-ffmpeg-android.sh
-          "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
-          "$RUNNER_TEMP/android-work"
-          "$RUNNER_TEMP/android-dist"
-          "$ANDROID_CI_ABIS"
-          "$RUNNER_TEMP/android-work/ffmpeg-8.1.2.tar.xz"
-      - name: Verify the native Android Maven publication
-        run: >-
-          ./gradlew --no-daemon complianceCheck
-          -PpublicationVersion=0.4.2-CI
-          -PandroidNativePayloadDirectory="$RUNNER_TEMP/android-dist"
-          -PandroidRuntimeAbis="$ANDROID_CI_ABIS"
-          -PbuildRecipeRevision="${{ github.sha }}"
+          source_name="kmedia-ffmpeg-runtime-$RUNTIME_VERSION-corresponding-source.tar.gz"
+          source_sha="$(awk -v p="$source_name" '$2 == p || $2 == "./" p {print $1}' "$RUNNER_TEMP/runtime/SHA256SUMS")"
+          [[ "$source_sha" =~ ^[0-9a-f]{64}$ ]]
+          args=()
+          if [[ "${{ matrix.target }}" == android-* ]]; then args+=(--ndk /usr/local/lib/android/sdk/ndk/29.0.14206865); fi
+          python3 -B native/build-client.py \
+            --target '${{ matrix.target }}' \
+            --runtime-sdk "$RUNNER_TEMP/runtime/sdk/${{ matrix.target }}" \
+            --runtime-version "$RUNTIME_VERSION" --runtime-source-sha256 "$source_sha" \
+            --version 0.5.0-ci --revision "$GITHUB_SHA" \
+            --output "$RUNNER_TEMP/client" "${args[@]}"
+      - name: Load the one shared runtime and bridge in one process
+        if: matrix.target == 'macos-aarch64'
+        run: |
+          ./gradlew --no-daemon \
+            -PkmediaFfmpegRuntimeRepository="$RUNNER_TEMP/runtime-maven/maven" \
+            -PkmediaBridgeTestRuntimeSdk="$RUNNER_TEMP/runtime/sdk/macos-aarch64" \
+            -PkmediaBridgeTestClientOutput="$RUNNER_TEMP/client" \
+            :ffmpeg:jvmTest --tests '*.SharedRuntimeNativeIntegrationTest'

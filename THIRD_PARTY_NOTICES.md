@@ -1,50 +1,27 @@
 # Third-party notices
 
-## FFmpeg
+## Shared FFmpeg and subtitle runtime
 
-KMediaBridge contains source code for an optional native bridge to FFmpeg.
-Stable runtime artifacts may contain the corresponding dynamically linked
-desktop or Android FFmpeg libraries; the Kotlin core artifacts do not.
+KMediaBridge contains only its bridge implementation. Native client artifacts
+link dynamically to the exact `KMediaFfmpegRuntime` release declared in their
+metadata; they do not redistribute a private FFmpeg or subtitle stack.
 
-FFmpeg is licensed under LGPL-2.1-or-later by default. Optional FFmpeg build
-features can change the resulting binary to GPL or make it non-redistributable.
-KMediaBridge therefore accepts only builds that explicitly use
-`--disable-gpl` and `--disable-nonfree` and pass the repository compliance
-gate.
+`KMediaFfmpegRuntime` publishes FFmpeg 8.1.2, libass 0.17.4, FreeType 2.14.1,
+FriBidi 1.0.16 and HarfBuzz 12.2.0 under their respective upstream licenses.
+Its release contains the corresponding sources, patches, build arguments,
+notices, SBOM and checksums. The exact source-archive URL and SHA-256 are copied
+from that runtime release into every KMediaBridge client manifest.
 
-- Project: https://ffmpeg.org/
-- Legal information: https://ffmpeg.org/legal.html
-- Pinned source: https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz
-- Detached signature: https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz.asc
-- Release-key fingerprint: `FCF986EA15E6E293A5644F10B4322F04D67658D8`
-- SHA-256: `464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c`
+- Runtime project: https://github.com/Shusek/KMediaFfmpegRuntime
+- FFmpeg legal information: https://ffmpeg.org/legal.html
 
-No FFmpeg trademark rights are granted by this project.
-
-## Optional subtitle composition stack
-
-The SDR subtitle burn-in flavor builds five pinned libraries as static PIC
-inputs to the replaceable, dynamically linked `libavfilter-kmb`. No x264/x265
-or other GPL FFmpeg option is enabled. Exact archives, hashes, and licenses are
-recorded in `compliance/subtitles/manifest.json` and copied into release source
-evidence whenever this flavor is published.
-
-- FreeType 2.14.3 — FreeType License (FTL)
-- FriBidi 1.0.16 library — LGPL-2.1-or-later (GPL command-line tools are not built)
-- HarfBuzz 14.2.1 — MIT
-- libunibreak 7.0 — Zlib
-- libass 0.17.5 — ISC
-
-The burn-in pipeline is intentionally limited to SDR text subtitles. Bitmap
-subtitles and HDR/HLG/Dolby Vision composition are not advertised by this
-stack.
+No FFmpeg or other upstream trademark rights are granted by this project.
 
 ## Java Native Access (JNA)
 
-The desktop JVM backend uses JNA to call the narrow native C ABI without an
-FFmpeg executable. JNA is offered under `Apache-2.0 OR LGPL-2.1-or-later`;
-KMediaBridge elects the Apache-2.0 option for the proprietary Kotlin backend.
-JNA is not part of the separately distributed LGPL native runtime artifact.
+The desktop JVM backend uses JNA to call the narrow native C ABI. JNA is
+offered under `Apache-2.0 OR LGPL-2.1-or-later`; KMediaBridge elects the
+Apache-2.0 option. JNA is not part of the shared native runtime artifact.
 
 - Project: https://github.com/java-native-access/jna
 - Artifact: `net.java.dev.jna:jna:5.19.1`
