@@ -12,7 +12,7 @@ on:
       runtime_version:
         description: Exact released KMediaFfmpegRuntime version
         required: true
-        default: 0.1.0-rc.1
+        default: 0.1.0-rc.2
         type: string
       tested_commit:
         description: Forty-character commit tested locally
@@ -73,7 +73,7 @@ jobs:
             test "$ARM_MATRIX" = true
           fi
           if [[ "$VERSION" == *-rc.* ]]; then
-            test "$RUNTIME_VERSION" = 0.1.0-rc.1
+            test "$RUNTIME_VERSION" = 0.1.0-rc.2
           else
             test "$RUNTIME_VERSION" = 0.1.0
           fi
