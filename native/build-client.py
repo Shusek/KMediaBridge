@@ -198,7 +198,8 @@ def write_manifest(
         ("library.0.name", library.name), ("library.0.sha256", sha256(library)),
         ("library.0.role", "BRIDGE"),
     ]
-    (output / "manifest.properties").write_text("\n".join(f"{key}={value}" for key, value in values) + "\n")
+    manifest = "\n".join(f"{key}={value}" for key, value in values) + "\n"
+    (output / "manifest.properties").write_bytes(manifest.encode("utf-8"))
 
 
 def main() -> int:
