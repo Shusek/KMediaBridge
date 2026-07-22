@@ -141,6 +141,8 @@ jobs:
           tar -xzf "$RUNNER_TEMP/runtime/$name" -C "$RUNNER_TEMP/runtime"
           test "$(cat "$RUNNER_TEMP/runtime/runtime-id.txt")" = '${{ inputs.tested_runtime_id }}'
       - name: Build one bridge client against the exact SDK
+        env:
+          RUNTIME_VERSION: ${{ inputs.runtime_version }}
         run: |
           runner_temp="$RUNNER_TEMP"
           if [[ '${{ matrix.target }}' == windows-* ]]; then runner_temp="$(cygpath -u "$RUNNER_TEMP")"; fi

@@ -106,6 +106,13 @@ def verify_public_text(root: Path) -> None:
     for field in ("android_arm_matrix_verified", "tested_commit", "tested_runtime_id", "runtime_report_sha256"):
         if field not in release:
             fail(f"release workflow omits local ARM attestation field: {field}")
+    build_marker = "- name: Build one bridge client against the exact SDK"
+    upload_marker = "- uses: actions/upload-artifact@"
+    if build_marker not in release or upload_marker not in release.split(build_marker, 1)[1]:
+        fail("release workflow does not retain the closed client build step")
+    build_step = release.split(build_marker, 1)[1].split(upload_marker, 1)[0]
+    if "RUNTIME_VERSION: ${{ inputs.runtime_version }}" not in build_step:
+        fail("release client build step does not receive the exact shared runtime version")
 
 
 def main() -> int:
