@@ -35,6 +35,10 @@ class ClientArchitectureTest(unittest.TestCase):
         self.assertIn('api(project(":ffmpeg-runtime-android"))', source)
         self.assertIn('api(project(":ffmpeg-runtime-desktop"))', source)
 
+    def test_release_publication_disables_incompatible_configuration_cache(self) -> None:
+        source = (ROOT / ".github/workflows/release.yml").read_text()
+        self.assertIn("./gradlew --no-daemon --no-configuration-cache", source)
+
     def test_android_assembler_emits_one_client_per_arm_abi(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -227,7 +227,7 @@ jobs:
             -PkmediaFfmpegRuntimeRepository="$RUNNER_TEMP/runtime-maven/maven" \
             -PkmediaBridgeAndroidNativePayloadDirectory="$RUNNER_TEMP/android-client" \
             -PkmediaBridgeDesktopNativePayloadDirectory="$RUNNER_TEMP/desktop-client"
-          ./gradlew --no-daemon \
+          ./gradlew --no-daemon --no-configuration-cache \
             -PpublicationVersion="$VERSION" \
             -PkmediaFfmpegRuntimeRepository="$RUNNER_TEMP/runtime-maven/maven" \
             -PkmediaBridgeAndroidNativePayloadDirectory="$RUNNER_TEMP/android-client" \
