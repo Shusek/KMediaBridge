@@ -12,7 +12,7 @@ on:
       runtime_version:
         description: Exact released KMediaFfmpegRuntime version
         required: true
-        default: 0.1.0-rc.2
+        default: 0.1.0-rc.3
         type: string
       tested_commit:
         description: Forty-character commit tested locally
@@ -73,13 +73,13 @@ jobs:
             test "$ARM_MATRIX" = true
           fi
           if [[ "$VERSION" == *-rc.* ]]; then
-            test "$RUNTIME_VERSION" = 0.1.0-rc.2
+            test "$RUNTIME_VERSION" = 0.1.0-rc.3
           else
             test "$RUNTIME_VERSION" = 0.1.0
           fi
           revision="$(git rev-parse HEAD)"
           test "$revision" = "$TESTED_COMMIT"
-          [[ "$TESTED_RUNTIME_ID" =~ ^kmediaffmpeg-8\.1\.2-ass-0\.17\.4-[0-9a-f]{16}$ ]]
+          [[ "$TESTED_RUNTIME_ID" =~ ^kmediaffmpeg-8\.1\.2-ass-0\.17\.5-[0-9a-f]{16}$ ]]
           [[ "$REPORT_SHA256" =~ ^[0-9a-f]{64}$ ]]
           python3 scripts/verify_compliance.py --root .
           echo "revision=$revision" >> "$GITHUB_OUTPUT"

@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 PLATFORMS = {"linux-x86_64", "linux-aarch64", "macos-aarch64", "windows-x86_64"}
-RUNTIME_ID = re.compile(r"kmediaffmpeg-8\.1\.2-ass-0\.17\.4-[0-9a-f]{16}")
+RUNTIME_ID = re.compile(r"kmediaffmpeg-8\.1\.2-ass-0\.17\.5-[0-9a-f]{16}")
 
 
 def props(path: Path) -> dict[str, str]:

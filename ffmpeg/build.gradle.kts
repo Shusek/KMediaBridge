@@ -11,7 +11,7 @@ plugins {
     alias(libs.plugins.ktlint)
 }
 
-val ffmpegRuntimeVersion = "0.1.0-rc.2"
+val ffmpegRuntimeVersion = "0.1.0-rc.3"
 
 kotlin {
     explicitApi()

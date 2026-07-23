@@ -758,7 +758,7 @@ private data class NativePayloadManifest(
                         ?: DesktopRuntimeLoader.run { reject("The native manifest ABI is invalid.") },
                 sharedRuntimeId =
                     required("sharedRuntimeId").also { value ->
-                        if (!value.matches(Regex("kmediaffmpeg-8\\.1\\.2-ass-0\\.17\\.4-[0-9a-f]{16}"))) {
+                        if (!value.matches(Regex("kmediaffmpeg-8\\.1\\.2-ass-0\\.17\\.5-[0-9a-f]{16}"))) {
                             DesktopRuntimeLoader.run { reject("The native manifest has an invalid shared runtime ID.") }
                         }
                     },

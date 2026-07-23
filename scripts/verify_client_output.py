@@ -18,7 +18,7 @@ EXPECTED = {
     "macos-aarch64": ("libkmediabridge.dylib", "arm64"),
     "windows-x86_64": ("kmediabridge.dll", "pei-x86-64"),
 }
-RUNTIME_ID = re.compile(r"kmediaffmpeg-8\.1\.2-ass-0\.17\.4-[0-9a-f]{16}")
+RUNTIME_ID = re.compile(r"kmediaffmpeg-8\.1\.2-ass-0\.17\.5-[0-9a-f]{16}")
 SEMVER = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 FORBIDDEN = re.compile(r"(?:libav.+-kmb|libkmediampv_av|libkmediabridge_av)")

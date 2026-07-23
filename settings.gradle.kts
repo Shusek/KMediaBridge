@@ -24,6 +24,10 @@ val sharedRuntimeProjectDir = providers.gradleProperty("kmediaFfmpegRuntimeProje
 if (sharedRuntimeProjectDir != null) {
     includeBuild(sharedRuntimeProjectDir) {
         dependencySubstitution {
+            substitute(module("io.github.shusek:kmedia-ass-runtime-android"))
+                .using(project(":kmedia-ass-runtime-android"))
+            substitute(module("io.github.shusek:kmedia-ass-runtime-desktop"))
+                .using(project(":kmedia-ass-runtime-desktop"))
             substitute(module("io.github.shusek:kmedia-ffmpeg-runtime-android"))
                 .using(project(":kmedia-ffmpeg-runtime-android"))
             substitute(module("io.github.shusek:kmedia-ffmpeg-runtime-desktop"))

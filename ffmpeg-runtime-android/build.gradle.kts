@@ -40,7 +40,7 @@ abstract class VerifyAndroidClientPayload : DefaultTask() {
         require(manifest.isFile) { "Android client manifest is missing." }
         val properties = Properties().apply { manifest.inputStream().use(::load) }
         require(properties.getProperty("sharedRuntimeId")?.matches(
-            Regex("kmediaffmpeg-8\\.1\\.2-ass-0\\.17\\.4-[0-9a-f]{16}"),
+            Regex("kmediaffmpeg-8\\.1\\.2-ass-0\\.17\\.5-[0-9a-f]{16}"),
         ) == true) { "Android client manifest has an invalid shared runtime ID." }
     }
 }
@@ -50,7 +50,7 @@ plugins {
     alias(libs.plugins.vanniktech.maven.publish)
 }
 
-val ffmpegRuntimeVersion = "0.1.0-rc.2"
+val ffmpegRuntimeVersion = "0.1.0-rc.3"
 val nativePayload =
     providers
         .gradleProperty("kmediaBridgeAndroidNativePayloadDirectory")
