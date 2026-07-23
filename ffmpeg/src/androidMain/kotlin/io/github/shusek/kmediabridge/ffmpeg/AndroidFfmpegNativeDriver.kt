@@ -29,7 +29,6 @@ import io.github.shusek.kmediabridge.VideoColorInfo
 import io.github.shusek.kmediabridge.VideoHandling
 import io.github.shusek.kmediabridge.VideoTrackInfo
 import io.github.shusek.kmediaffmpeg.runtime.KMediaFfmpegRuntime
-import io.github.shusek.kmediaffmpeg.runtime.RuntimeSource as SharedRuntimeSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -50,6 +49,7 @@ import java.security.MessageDigest
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import io.github.shusek.kmediaffmpeg.runtime.RuntimeSource as SharedRuntimeSource
 
 /** Selects the process-wide native FFmpeg runtime before its first Android use. */
 public sealed interface AndroidFfmpegRuntimeSelection {

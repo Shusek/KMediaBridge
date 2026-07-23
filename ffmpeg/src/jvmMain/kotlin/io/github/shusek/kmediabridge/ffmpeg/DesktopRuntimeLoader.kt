@@ -8,13 +8,12 @@ import com.sun.jna.Native
 import com.sun.jna.NativeLibrary
 import com.sun.jna.Pointer
 import com.sun.jna.ptr.PointerByReference
-import io.github.shusek.kmediaffmpeg.runtime.KMediaFfmpegRuntime
-import io.github.shusek.kmediaffmpeg.runtime.RuntimeSource as SharedRuntimeSource
 import io.github.shusek.kmediabridge.BridgeCapabilities
 import io.github.shusek.kmediabridge.BridgeOutput
 import io.github.shusek.kmediabridge.MediaBridgeErrorCode
 import io.github.shusek.kmediabridge.MediaBridgeException
 import io.github.shusek.kmediabridge.MediaContainer
+import io.github.shusek.kmediaffmpeg.runtime.KMediaFfmpegRuntime
 import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
@@ -22,6 +21,7 @@ import java.nio.file.attribute.PosixFilePermission
 import java.security.MessageDigest
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicReference
+import io.github.shusek.kmediaffmpeg.runtime.RuntimeSource as SharedRuntimeSource
 
 internal fun interface KmbWriteCallback : Callback {
     fun invoke(
