@@ -239,14 +239,9 @@ jobs:
             :ffmpeg-runtime-desktop:publishAllPublicationsToReleaseRepository
           python3 scripts/build_central_bundle.py --normalize \
             --staging "$RUNNER_TEMP/maven" --version "$VERSION"
-          python3 - "$RUNNER_TEMP/maven" "$VERSION" "$RUNTIME_VERSION" <<'PY'
-          import pathlib, sys, xml.etree.ElementTree as ET
-          root, version, runtime = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
-          for artifact, dependency in (("kmedia-bridge-client-android", "kmedia-ffmpeg-runtime-android"), ("kmedia-bridge-client-desktop", "kmedia-ffmpeg-runtime-desktop")):
-              pom = root / "io/github/shusek" / artifact / version / f"{artifact}-{version}.pom"
-              values = [(node.findtext("groupId"), node.findtext("artifactId"), node.findtext("version")) for node in ET.parse(pom).findall(".//dependency")]
-              assert ("io.github.shusek", dependency, runtime) in values, values
-          PY
+          python3 scripts/verify_transitive_runtime_poms.py \
+            --staging "$RUNNER_TEMP/maven" --version "$VERSION" \
+            --runtime-version "$RUNTIME_VERSION"
           gtar --sort=name --mtime='@${{ needs.readiness.outputs.epoch }}' --owner=0 --group=0 --numeric-owner \
             -czf "$RUNNER_TEMP/kmedia-bridge-$VERSION-maven-repository.tar.gz" -C "$RUNNER_TEMP" maven
       - name: Build source, SBOM, SDK and checksum assets
