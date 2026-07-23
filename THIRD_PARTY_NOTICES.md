@@ -6,7 +6,7 @@ KMediaBridge contains only its bridge implementation. Native client artifacts
 link dynamically to the exact `KMediaFfmpegRuntime` release declared in their
 metadata; they do not redistribute a private FFmpeg or subtitle stack.
 
-`KMediaFfmpegRuntime` publishes FFmpeg 8.1.2, libass 0.17.4, FreeType 2.14.1,
+`KMediaFfmpegRuntime` publishes FFmpeg 8.1.2, libass 0.17.5, FreeType 2.14.1,
 FriBidi 1.0.16 and HarfBuzz 12.2.0 under their respective upstream licenses.
 Its release contains the corresponding sources, patches, build arguments,
 notices, SBOM and checksums. The exact source-archive URL and SHA-256 are copied

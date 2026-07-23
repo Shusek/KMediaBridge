@@ -265,7 +265,7 @@ private data class AndroidRuntimeManifest(
             "The Android HDR runtime unexpectedly declares subtitle burn-in."
         }
         require(dynamicLinkingVerified) { "The Android runtime has no verified dynamic FFmpeg boundary." }
-        require(sharedRuntimeId.matches(Regex("kmediaffmpeg-8\\.1\\.2-ass-0\\.17\\.4-[0-9a-f]{16}"))) {
+        require(sharedRuntimeId.matches(Regex("kmediaffmpeg-8\\.1\\.2-ass-0\\.17\\.5-[0-9a-f]{16}"))) {
             "The Android client manifest has an invalid shared runtime ID."
         }
     }

@@ -8,11 +8,13 @@ Both the platform client and the exact shared runtime are transitive:
 
 ```kotlin
 commonMain.dependencies {
-    implementation("io.github.shusek:kmedia-bridge-ffmpeg:0.5.0-rc.1")
+    implementation("io.github.shusek:kmedia-bridge-ffmpeg:0.5.0-rc.2")
 }
 ```
 
-The lower-level engine-neutral contracts are available as `io.github.shusek:kmedia-bridge-api:0.5.0-rc.1`. Do not add a native client or `runtimeOnly` dependency manually.
+The lower-level engine-neutral contracts are available as
+`io.github.shusek:kmedia-bridge-api:0.5.0-rc.2`. Do not add a native client or
+`runtimeOnly` dependency manually.
 
 ```kotlin
 val driver = BundledFfmpegNativeDriver.load()
@@ -34,7 +36,13 @@ KMediaBridge is not an iOS backend. Its common API may be consumed by iOS source
 
 ## One process, one runtime
 
-Before loading the bridge, KMediaBridge initializes `KMediaFfmpegRuntime` and verifies the exact runtime ID recorded when the client was built. A process that already selected another runtime ID fails with a controlled compatibility error. The bridge artifact contains only `libkmediabridge`; FFmpeg, libass, FreeType, FriBidi and HarfBuzz come from the shared runtime.
+Before loading the bridge, KMediaBridge initializes `KMediaFfmpegRuntime` and
+verifies the exact runtime ID recorded when the client was built. A process
+that already selected another runtime ID fails with a controlled compatibility
+error. The bridge artifact contains only `libkmediabridge`. The exact FFmpeg
+runtime dependency owns the six FFmpeg libraries and transitively selects the
+separate exact `KMediaAssRuntime`, which owns libass, FreeType, FriBidi and
+HarfBuzz once for the process.
 
 KMediaPlayer may therefore include both its MPV and KMediaBridge adapters. Both clients bind to the same prefixed dynamic-library graph.
 
