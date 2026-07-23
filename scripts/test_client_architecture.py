@@ -39,6 +39,43 @@ class ClientArchitectureTest(unittest.TestCase):
         source = (ROOT / ".github/workflows/release.yml").read_text()
         self.assertIn("./gradlew --no-daemon --no-configuration-cache", source)
 
+    def test_transitive_runtime_pom_verifier_supports_maven_namespaces(self) -> None:
+        version = "0.5.0-rc.1"
+        runtime_version = "0.1.0-rc.2"
+        with tempfile.TemporaryDirectory() as temporary:
+            staging = Path(temporary)
+            for artifact, runtime_artifact in (
+                ("kmedia-bridge-client-android", "kmedia-ffmpeg-runtime-android"),
+                ("kmedia-bridge-client-desktop", "kmedia-ffmpeg-runtime-desktop"),
+            ):
+                directory = staging / "io/github/shusek" / artifact / version
+                directory.mkdir(parents=True)
+                (directory / f"{artifact}-{version}.pom").write_text(
+                    """<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <dependencies><dependency>
+    <groupId>io.github.shusek</groupId>
+    <artifactId>{runtime_artifact}</artifactId>
+    <version>{runtime_version}</version>
+  </dependency></dependencies>
+</project>
+""".format(runtime_artifact=runtime_artifact, runtime_version=runtime_version),
+                    encoding="utf-8",
+                )
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts/verify_transitive_runtime_poms.py"),
+                    "--staging",
+                    str(staging),
+                    "--version",
+                    version,
+                    "--runtime-version",
+                    runtime_version,
+                ],
+                check=True,
+            )
+
     def test_android_assembler_emits_one_client_per_arm_abi(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
