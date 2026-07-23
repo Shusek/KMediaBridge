@@ -21,6 +21,7 @@ class ClientArchitectureTest(unittest.TestCase):
         self.assertNotIn("./configure", source)
         self.assertNotIn('"android-x86_64"', source)
         self.assertNotIn('"macos-x86_64"', source)
+        self.assertIn('manifest.properties").write_bytes(manifest.encode("utf-8"))', source)
 
     def test_legacy_ffmpeg_recipes_are_absent(self) -> None:
         for name in (
