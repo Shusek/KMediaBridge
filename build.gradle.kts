@@ -48,7 +48,12 @@ val testScripts =
     tasks.register<Exec>("testScripts") {
         group = "verification"
         description = "Runs client packaging and native inspection regression tests."
-        inputs.files(fileTree("scripts") { include("*.py"); exclude("__pycache__/**") })
+        inputs.files(
+            fileTree("scripts") {
+                include("*.py")
+                exclude("__pycache__/**")
+            },
+        )
         commandLine(pythonExecutable, "-m", "unittest", "discover", "-s", "scripts", "-p", "test_*.py")
     }
 
