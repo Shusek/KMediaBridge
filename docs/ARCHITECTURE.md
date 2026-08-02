@@ -5,7 +5,7 @@
 ```text
 kmedia-bridge-ffmpeg
 ├── kmedia-bridge-client-android  ─┐
-├── kmedia-bridge-client-desktop  ─┼─ exact KMediaFfmpegRuntime 0.1.0-rc.3
+├── kmedia-bridge-client-desktop  ─┼─ exact KMediaFfmpegRuntime 0.1.0-rc.4
 └── kmedia-bridge-api             ─┘
 ```
 
