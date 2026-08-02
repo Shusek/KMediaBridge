@@ -8,12 +8,12 @@ Both the platform client and the exact shared runtime are transitive:
 
 ```kotlin
 commonMain.dependencies {
-    implementation("io.github.shusek:kmedia-bridge-ffmpeg:0.5.0-rc.3")
+    implementation("io.github.shusek:kmedia-bridge-ffmpeg:0.5.0-rc.4")
 }
 ```
 
 The lower-level engine-neutral contracts are available as
-`io.github.shusek:kmedia-bridge-api:0.5.0-rc.3`. Do not add a native client or
+`io.github.shusek:kmedia-bridge-api:0.5.0-rc.4`. Do not add a native client or
 `runtimeOnly` dependency manually.
 
 ```kotlin

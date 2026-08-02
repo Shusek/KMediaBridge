@@ -8,6 +8,7 @@ local.properties
 *.iml
 *.log
 .DS_Store
+__pycache__/
 native/prebuilt/
 native/work/
 compliance/generated/
