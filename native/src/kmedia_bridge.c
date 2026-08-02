@@ -306,7 +306,9 @@ const char *kmb_ffmpeg_configuration(void) {
 }
 
 const char *kmb_runtime_features_json(void) {
-#if defined(KMB_ENABLE_SUBTITLE_BURN_IN) && defined(KMB_ENABLE_HDR_TO_SDR)
+#if defined(KMB_ENABLE_AVFOUNDATION_TRANSCODE)
+    return "{\"subtitleBurnIn\":true,\"hdrToSdrToneMap\":true,\"avFoundationCompatibility\":true}";
+#elif defined(KMB_ENABLE_SUBTITLE_BURN_IN) && defined(KMB_ENABLE_HDR_TO_SDR)
     return "{\"subtitleBurnIn\":true,\"hdrToSdrToneMap\":true}";
 #elif defined(KMB_ENABLE_SUBTITLE_BURN_IN)
     return "{\"subtitleBurnIn\":true,\"hdrToSdrToneMap\":false}";

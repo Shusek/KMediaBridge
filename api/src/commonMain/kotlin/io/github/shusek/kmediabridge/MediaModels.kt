@@ -55,6 +55,8 @@ public enum class MediaContainer {
     MPEG_TS,
     HLS,
     WEBM,
+    AVI,
+    ASF,
     UNKNOWN,
 }
 
@@ -64,6 +66,12 @@ public enum class VideoCodec {
     AV1,
     VP9,
     DOLBY_VISION,
+    MPEG4,
+    MJPEG,
+    WMV1,
+    WMV2,
+    WMV3,
+    VC1,
     UNKNOWN,
 }
 

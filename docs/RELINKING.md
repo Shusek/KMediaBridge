@@ -17,4 +17,4 @@ Android additionally requires `--ndk /path/to/android-ndk`. Valid Android target
 
 The builder verifies `runtime.properties`, component versions, target ABI and runtime ID; links dynamically against the prefixed SDK libraries; produces one bridge library; emits a client SDK and manifest; and runs dependency/architecture inspection. It does not build the shared runtime.
 
-To replace the shared libraries themselves, use the corresponding-source bundle and instructions published by KMediaFfmpegRuntime. The replacement must preserve its ABI and runtime ID contract or both clients reject it before loading.
+To replace the shared libraries themselves, use the corresponding-source bundle and instructions published by KMediaFfmpegRuntime. The replacement must preserve its ABI and runtime ID contract or both clients reject it before loading. The AVFoundation-compatible macOS client additionally requires the shared runtime's compatible `avfilter`, `swscale`, and `swresample` libraries plus its documented decoder and encoder set.

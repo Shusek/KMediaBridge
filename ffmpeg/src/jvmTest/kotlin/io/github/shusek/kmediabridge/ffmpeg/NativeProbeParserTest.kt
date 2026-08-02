@@ -4,7 +4,9 @@ package io.github.shusek.kmediabridge.ffmpeg
 
 import io.github.shusek.kmediabridge.AudioTrackInfo
 import io.github.shusek.kmediabridge.DynamicRangeFormat
+import io.github.shusek.kmediabridge.MediaContainer
 import io.github.shusek.kmediabridge.SubtitleTrackInfo
+import io.github.shusek.kmediabridge.VideoCodec
 import io.github.shusek.kmediabridge.VideoTrackInfo
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -61,4 +63,53 @@ class NativeProbeParserTest {
         assertEquals("pol", subtitle.language)
         assertFalse(subtitle.isImageBased)
     }
+
+    @Test
+    fun recognizesLegacyAviAndAsfVideoCodecs() {
+        val avi = NativeProbeParser.parse(legacyProbe(format = "avi", codec = "mpeg4"))
+        val asf = NativeProbeParser.parse(legacyProbe(format = "asf", codec = "wmv2"))
+
+        assertEquals(MediaContainer.AVI, avi.container)
+        assertEquals(
+            DynamicRangeFormat.SDR,
+            avi.tracks
+                .filterIsInstance<VideoTrackInfo>()
+                .single()
+                .colorInfo.dynamicRange,
+        )
+        assertEquals(
+            VideoCodec.MPEG4,
+            avi.tracks
+                .filterIsInstance<VideoTrackInfo>()
+                .single()
+                .codec,
+        )
+        assertEquals(MediaContainer.ASF, asf.container)
+        assertEquals(
+            VideoCodec.WMV2,
+            asf.tracks
+                .filterIsInstance<VideoTrackInfo>()
+                .single()
+                .codec,
+        )
+    }
+
+    private fun legacyProbe(
+        format: String,
+        codec: String,
+    ): String =
+        """
+        {
+          "format":"$format","durationUs":1000000,
+          "tracks":[{
+            "type":"video","id":0,"codec":"$codec","profile":null,"level":null,
+            "width":640,"height":360,"bitDepth":8,"dynamicRange":"UNKNOWN",
+            "colorRange":null,"colorPrimaries":null,"colorTransfer":null,"colorMatrix":null,
+            "frameRateNumerator":30,"frameRateDenominator":1,
+            "hasHdr10PlusMetadata":false,"dolbyVision":null,
+            "masteringDisplay":null,"contentLightLevel":null,
+            "language":null,"title":null,"isDefault":true
+          }]
+        }
+        """.trimIndent()
 }

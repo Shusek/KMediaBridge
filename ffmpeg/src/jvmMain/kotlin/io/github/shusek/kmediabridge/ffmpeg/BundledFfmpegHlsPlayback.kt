@@ -51,6 +51,9 @@ public enum class FfmpegHlsVideoOutputPolicy {
 
     /** Keep confirmed SDR unchanged; tone-map only explicit HDR10, HDR10+, or HLG input to SDR. */
     FORCE_SDR,
+
+    /** Decode to limited-range BT.709 AVC and AAC so Apple AVFoundation can consume legacy input. */
+    AVFOUNDATION_COMPATIBLE_SDR,
 }
 
 public data class FfmpegHlsPlaybackRequest(
@@ -112,7 +115,7 @@ public object BundledFfmpegHlsPlaybackBackend {
                 BridgeRequest(
                     output = BridgeOutput.CMAF_FRAGMENT_STREAM,
                     videoHandling = videoHandling,
-                    audioHandling = AudioHandling.COPY,
+                    audioHandling = request.resolveAudioHandling(),
                     subtitleHandling =
                         if (request.selectedSubtitleTrackId == null) {
                             SubtitleHandling.OMIT
@@ -154,6 +157,9 @@ public object BundledFfmpegHlsPlaybackBackend {
 
 internal fun FfmpegHlsPlaybackRequest.resolveVideoHandling(probe: MediaProbe): VideoHandling {
     if (selectedSubtitleTrackId != null) return VideoHandling.TRANSCODE_TO_SDR
+    if (videoOutputPolicy == FfmpegHlsVideoOutputPolicy.AVFOUNDATION_COMPATIBLE_SDR) {
+        return VideoHandling.TRANSCODE_TO_SDR
+    }
     if (videoOutputPolicy == FfmpegHlsVideoOutputPolicy.PRESERVE_SOURCE) return VideoHandling.COPY
 
     val video =
@@ -170,6 +176,13 @@ internal fun FfmpegHlsPlaybackRequest.resolveVideoHandling(probe: MediaProbe): V
         VideoHandling.TONE_MAP_TO_SDR
     }
 }
+
+internal fun FfmpegHlsPlaybackRequest.resolveAudioHandling(): AudioHandling =
+    if (videoOutputPolicy == FfmpegHlsVideoOutputPolicy.AVFOUNDATION_COMPATIBLE_SDR) {
+        AudioHandling.TRANSCODE_AAC
+    } else {
+        AudioHandling.COPY
+    }
 
 internal fun MediaProbe.copiedHdrSignal(outputInfo: MediaOutputInfo): FfmpegCmafHdrSampleCopy {
     if (outputInfo.videoHandling != VideoHandling.COPY) return FfmpegCmafHdrSampleCopy.NONE

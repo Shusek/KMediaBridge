@@ -95,6 +95,12 @@ tasks.withType<Test>().configureEach {
     providers.gradleProperty("kmediaBridgeTestClientOutput").orNull?.let { clientOutput ->
         systemProperty("kmediabridge.testClientOutput", clientOutput)
     }
+    providers.gradleProperty("kmediaBridgeLegacyTestMedia").orNull?.let { mediaPath ->
+        systemProperty("kmediabridge.legacyTestMedia", mediaPath)
+    }
+    providers.gradleProperty("kmediaBridgeExternalRuntimeDirectory").orNull?.let { runtimeDirectory ->
+        systemProperty("kmediabridge.externalRuntimeDirectory", runtimeDirectory)
+    }
 }
 
 publishing {

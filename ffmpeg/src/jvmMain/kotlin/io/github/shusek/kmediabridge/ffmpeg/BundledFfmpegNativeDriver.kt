@@ -87,12 +87,19 @@ public class BundledFfmpegNativeDriver private constructor(
             )
         }
         return BridgeSupport.Supported(
-            confidence = if (request.subtitleHandling == SubtitleHandling.BURN_IN) 80 else 90,
+            confidence =
+                when {
+                    request.audioHandling == AudioHandling.TRANSCODE_AAC -> 85
+                    request.subtitleHandling == SubtitleHandling.BURN_IN -> 80
+                    else -> 90
+                },
             reason =
-                if (request.subtitleHandling == SubtitleHandling.BURN_IN) {
-                    "The selected FFmpeg runtime can decode SDR video and composite text subtitles through libass."
-                } else {
-                    "The selected FFmpeg runtime can remux this local input without re-encoding video."
+                when {
+                    request.audioHandling == AudioHandling.TRANSCODE_AAC ->
+                        "The selected FFmpeg runtime can decode SDR video and audio into AVFoundation-compatible AVC/AAC CMAF."
+                    request.subtitleHandling == SubtitleHandling.BURN_IN ->
+                        "The selected FFmpeg runtime can decode SDR video and composite text subtitles through libass."
+                    else -> "The selected FFmpeg runtime can remux this local input without re-encoding video."
                 },
         )
     }
@@ -177,7 +184,7 @@ public class BundledFfmpegNativeDriver private constructor(
                 inputColorInfo = videoTrack.colorInfo,
                 outputColorInfo =
                     if (
-                        request.videoHandling == VideoHandling.TONE_MAP_TO_SDR ||
+                        request.videoHandling in setOf(VideoHandling.TRANSCODE_TO_SDR, VideoHandling.TONE_MAP_TO_SDR) ||
                         request.subtitleHandling == SubtitleHandling.BURN_IN
                     ) {
                         SDR_BT709_COLOR_INFO
@@ -215,15 +222,18 @@ public class BundledFfmpegNativeDriver private constructor(
                 "The selected desktop driver currently emits a CMAF fragment stream."
             request.videoHandling == VideoHandling.TONE_MAP_TO_SDR && !capabilities.canToneMapToSdr ->
                 "The selected runtime does not include the controlled HDR-to-SDR pipeline."
+            request.videoHandling == VideoHandling.TRANSCODE_TO_SDR && !capabilities.canTranscodeVideo ->
+                "The selected runtime does not include an SDR video transcoder."
             request.subtitleHandling == SubtitleHandling.BURN_IN && !capabilities.canBurnSubtitles ->
                 "The selected runtime does not include the optional libass subtitle burn-in pipeline."
             request.subtitleHandling == SubtitleHandling.BURN_IN && request.videoHandling != VideoHandling.TRANSCODE_TO_SDR ->
                 "Subtitle burn-in requires explicit TRANSCODE_TO_SDR video handling."
-            request.subtitleHandling == SubtitleHandling.OMIT &&
-                request.videoHandling !in setOf(VideoHandling.COPY, VideoHandling.TONE_MAP_TO_SDR) ->
-                "The selected runtime copies compressed video or performs explicit HDR-to-SDR tone mapping."
-            request.audioHandling !in setOf(AudioHandling.OMIT, AudioHandling.COPY) ->
-                "The selected runtime currently copies or omits audio."
+            request.videoHandling == VideoHandling.TRANSCODE_TO_SDR &&
+                request.subtitleHandling == SubtitleHandling.OMIT &&
+                request.audioHandling == AudioHandling.COPY ->
+                "The AVFoundation compatibility transcoder requires AAC audio transcoding or omitted audio."
+            request.audioHandling == AudioHandling.TRANSCODE_AAC && !capabilities.canTranscodeAudio ->
+                "The selected runtime does not include AAC audio transcoding."
             request.subtitleHandling == SubtitleHandling.BURN_IN && request.preferredSubtitleTrackId == null ->
                 "Subtitle burn-in requires an explicitly selected subtitle track."
             request.dolbyVisionHandling != DolbyVisionHandling.PRESERVE ->
@@ -387,6 +397,16 @@ private class DesktopFfmpegSession(
                                 startTimeUs = active.positionUs,
                                 preferredVideoTrackId = outputInfo.selectedVideoTrackId ?: -1,
                                 preferredAudioTrackId = outputInfo.selectedAudioTrackId ?: -2,
+                                consumer = consumeBytes,
+                            )
+                        } else if (outputInfo.audioHandling == AudioHandling.TRANSCODE_AAC) {
+                            runtime.transcodeAvFoundationFragmentedMp4(
+                                inputLocator = input.locator,
+                                fragmentDurationUs = request.fragmentDurationUs,
+                                startTimeUs = active.positionUs,
+                                preferredVideoTrackId = outputInfo.selectedVideoTrackId ?: -1,
+                                preferredAudioTrackId = outputInfo.selectedAudioTrackId ?: -2,
+                                preferredSubtitleTrackId = outputInfo.selectedSubtitleTrackId ?: -2,
                                 consumer = consumeBytes,
                             )
                         } else if (outputInfo.subtitleHandling == SubtitleHandling.BURN_IN) {
