@@ -2,6 +2,7 @@
 
 package io.github.shusek.kmediabridge.ffmpeg
 
+import io.github.shusek.kmediabridge.AudioHandling
 import io.github.shusek.kmediabridge.ColorMatrix
 import io.github.shusek.kmediabridge.ColorPrimaries
 import io.github.shusek.kmediabridge.ColorRange
@@ -49,6 +50,14 @@ class FfmpegHlsVideoOutputPolicyTest {
             VideoHandling.TONE_MAP_TO_SDR,
             request(FfmpegHlsVideoOutputPolicy.FORCE_SDR).resolveVideoHandling(probe(DynamicRangeFormat.UNKNOWN)),
         )
+    }
+
+    @Test
+    fun avFoundationCompatibilityAlwaysTranscodesVideoAndAudio() {
+        val request = request(FfmpegHlsVideoOutputPolicy.AVFOUNDATION_COMPATIBLE_SDR)
+
+        assertEquals(VideoHandling.TRANSCODE_TO_SDR, request.resolveVideoHandling(probe(DynamicRangeFormat.SDR)))
+        assertEquals(AudioHandling.TRANSCODE_AAC, request.resolveAudioHandling())
     }
 
     private fun request(policy: FfmpegHlsVideoOutputPolicy): FfmpegHlsPlaybackRequest =

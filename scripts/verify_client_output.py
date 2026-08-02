@@ -70,12 +70,18 @@ def main() -> int:
         raise ValueError("KMediaBridge client has incomplete shared-runtime source evidence")
     tone_map = args.target.startswith("android-") or args.target == "macos-aarch64"
     subtitle_burn = args.target == "macos-aarch64"
+    avfoundation_compatibility = args.target == "macos-aarch64"
     if manifest.get("capability.canToneMapToSdr") != str(tone_map).lower():
         raise ValueError("tone-map capability differs from the compiled target policy")
     if manifest.get("capability.canTranscodeVideo") != str(tone_map).lower():
         raise ValueError("video-transcode capability differs from the compiled target policy")
+    if manifest.get("capability.canTranscodeAudio") != str(avfoundation_compatibility).lower():
+        raise ValueError("audio-transcode capability differs from the compiled target policy")
     if manifest.get("capability.canBurnSubtitles") != str(subtitle_burn).lower():
         raise ValueError("subtitle-burn capability differs from the compiled target policy")
+    input_containers = set(manifest.get("capability.inputContainers", "").split(","))
+    if ({"AVI", "ASF"}.issubset(input_containers)) != avfoundation_compatibility:
+        raise ValueError("legacy input capabilities differ from the compiled target policy")
     if manifest.get("runtimeFlavor") != ("SUBTITLE_BURN_IN_SDR" if subtitle_burn else "REMUX_ONLY"):
         raise ValueError("runtime flavor differs from the compiled target policy")
     if args.target.startswith(("macos-",)):
@@ -93,6 +99,8 @@ def main() -> int:
         raise ValueError("KMediaBridge client is not linked only to the shared runtime ABI")
     if ("kmediaffmpeg_avfilter" in dependencies) != (args.target == "macos-aarch64"):
         raise ValueError("KMediaBridge subtitle-filter linkage differs from target policy")
+    if ("kmediaffmpeg_swresample" in dependencies) != avfoundation_compatibility:
+        raise ValueError("KMediaBridge audio-conversion linkage differs from target policy")
     if any(path.suffix in {".a", ".o", ".obj"} for path in args.output.rglob("*")):
         raise ValueError("KMediaBridge client output contains a static object")
     return 0

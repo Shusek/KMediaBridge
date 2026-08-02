@@ -109,6 +109,7 @@ def compile_client(target: str, sdk: Path, output: Path, ndk: Path | None) -> tu
         ROOT / "native/src/kmedia_bridge_subtitles.c",
         ROOT / "native/src/kmedia_bridge_hdr_math.c",
         ROOT / "native/src/kmedia_bridge_tonemap.c",
+        ROOT / "native/src/kmedia_bridge_avfoundation.c",
     ]
     includes = ["-I", str(ROOT / "native/include"), "-I", str(ROOT / "native/src"), "-I", str(sdk / "include")]
     features: list[str] = []
@@ -116,8 +117,14 @@ def compile_client(target: str, sdk: Path, output: Path, ndk: Path | None) -> tu
     if target in ANDROID or target == "macos-aarch64":
         features.append("-DKMB_ENABLE_HDR_TO_SDR=1")
     if target == "macos-aarch64":
-        features.append("-DKMB_ENABLE_SUBTITLE_BURN_IN=1")
-        feature_libraries.append("-lkmediaffmpeg_avfilter")
+        features.extend([
+            "-DKMB_ENABLE_SUBTITLE_BURN_IN=1",
+            "-DKMB_ENABLE_AVFOUNDATION_TRANSCODE=1",
+        ])
+        feature_libraries.extend([
+            "-lkmediaffmpeg_avfilter",
+            "-lkmediaffmpeg_swresample",
+        ])
     common = [
         "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-fvisibility=hidden",
         *features, *includes, *(str(source) for source in sources),
@@ -172,6 +179,10 @@ def write_manifest(
 ) -> None:
     tone_map = target in ANDROID or target == "macos-aarch64"
     subtitle_burn = target == "macos-aarch64"
+    avfoundation_compatibility = target == "macos-aarch64"
+    input_containers = ["MATROSKA", "WEBM", "MP4", "FRAGMENTED_MP4", "MPEG_TS"]
+    if avfoundation_compatibility:
+        input_containers.extend(["AVI", "ASF"])
     values = [
         ("schemaVersion", "1"), ("platform", target), ("abiVersion", "4"),
         ("sharedRuntimeId", runtime["runtimeId"]),
@@ -185,14 +196,14 @@ def write_manifest(
         ("buildRecipeRevision", revision), ("exactCorrespondingSourceAvailable", "true"),
         ("dynamicLinkingVerified", "true"),
         ("runtimeFlavor", "SUBTITLE_BURN_IN_SDR" if subtitle_burn else "REMUX_ONLY"),
-        ("capability.inputContainers", "MATROSKA,WEBM,MP4,FRAGMENTED_MP4,MPEG_TS"),
+        ("capability.inputContainers", ",".join(input_containers)),
         ("capability.outputs", "CMAF_FRAGMENT_STREAM"), ("capability.canProbe", "true"),
         ("capability.canCopyVideo", "true"), ("capability.canToneMapToSdr", str(tone_map).lower()),
         ("capability.canConvertDolbyVisionProfile7", "false"),
         ("capability.supportsLiveInput", "false"), ("capability.supportsEncryptedInput", "false"),
         ("capability.supportsRemoteInput", "false"),
         ("capability.canTranscodeVideo", str(tone_map).lower()),
-        ("capability.canTranscodeAudio", "false"),
+        ("capability.canTranscodeAudio", str(avfoundation_compatibility).lower()),
         ("capability.canBurnSubtitles", str(subtitle_burn).lower()),
         ("component.count", "0"), ("library.count", "1"),
         ("library.0.name", library.name), ("library.0.sha256", sha256(library)),

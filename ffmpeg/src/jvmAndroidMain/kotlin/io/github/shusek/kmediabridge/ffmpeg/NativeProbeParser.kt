@@ -84,9 +84,17 @@ internal object NativeProbeParser {
     }
 
     private fun parseVideo(track: JsonObject): VideoTrackInfo {
+        val codecName = track.string("codec")
         val dynamicRange =
             runCatching { DynamicRangeFormat.valueOf(track.string("dynamicRange")) }
                 .getOrDefault(DynamicRangeFormat.UNKNOWN)
+                .let { reported ->
+                    if (reported == DynamicRangeFormat.UNKNOWN && codecName.lowercase() in legacySdrVideoCodecs) {
+                        DynamicRangeFormat.SDR
+                    } else {
+                        reported
+                    }
+                }
         val dolbyVision =
             track["dolbyVision"]
                 ?.takeUnless { it is JsonNull }
@@ -104,7 +112,7 @@ internal object NativeProbeParser {
         return VideoTrackInfo(
             id = track.int("id"),
             language = track.optionalString("language"),
-            codec = parseVideoCodec(track.string("codec"), dynamicRange),
+            codec = parseVideoCodec(codecName, dynamicRange),
             profile = track.optionalNonNegativeInt("profile"),
             level = track.optionalNonNegativeInt("level"),
             width = track.optionalPositiveInt("width"),
@@ -158,6 +166,8 @@ internal object NativeProbeParser {
             normalized == "webm" -> MediaContainer.WEBM
             "mov" in normalized || "mp4" in normalized -> MediaContainer.MP4
             "mpegts" in normalized -> MediaContainer.MPEG_TS
+            normalized == "avi" -> MediaContainer.AVI
+            "asf" in normalized -> MediaContainer.ASF
             else -> MediaContainer.UNKNOWN
         }
     }
@@ -174,6 +184,12 @@ internal object NativeProbeParser {
                 "hevc", "h265" -> VideoCodec.HEVC
                 "av1" -> VideoCodec.AV1
                 "vp9" -> VideoCodec.VP9
+                "mpeg4" -> VideoCodec.MPEG4
+                "mjpeg" -> VideoCodec.MJPEG
+                "wmv1" -> VideoCodec.WMV1
+                "wmv2" -> VideoCodec.WMV2
+                "wmv3" -> VideoCodec.WMV3
+                "vc1" -> VideoCodec.VC1
                 else -> VideoCodec.UNKNOWN
             }
         }
@@ -243,4 +259,6 @@ internal object NativeProbeParser {
             ?.takeIf { it >= 0 }
 
     private fun JsonObject.nullableLong(name: String): Long? = get(name)?.takeUnless { it is JsonNull }?.jsonPrimitive?.longOrNull
+
+    private val legacySdrVideoCodecs = setOf("mpeg4", "mjpeg", "wmv1", "wmv2", "wmv3", "vc1")
 }

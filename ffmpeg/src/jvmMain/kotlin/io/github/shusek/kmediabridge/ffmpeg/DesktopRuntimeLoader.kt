@@ -83,6 +83,18 @@ internal interface KmbNativeApi : Library {
         outputError: PointerByReference,
     ): Int
 
+    fun kmb_transcode_avfoundation_fragmented_mp4_stream(
+        inputLocator: String,
+        fragmentDurationUs: Long,
+        startTimeUs: Long,
+        preferredVideoTrackId: Int,
+        preferredAudioTrackId: Int,
+        preferredSubtitleTrackId: Int,
+        writeCallback: KmbWriteCallback,
+        opaque: Pointer?,
+        outputError: PointerByReference,
+    ): Int
+
     fun kmb_free_string(value: Pointer?)
 }
 
@@ -230,6 +242,48 @@ internal class LoadedFfmpegRuntime(
         }
     }
 
+    fun transcodeAvFoundationFragmentedMp4(
+        inputLocator: String,
+        fragmentDurationUs: Long,
+        startTimeUs: Long,
+        preferredVideoTrackId: Int,
+        preferredAudioTrackId: Int,
+        preferredSubtitleTrackId: Int,
+        consumer: (ByteArray) -> Boolean,
+    ) {
+        val outputError = PointerByReference()
+        val callbackFailure = AtomicReference<Throwable?>(null)
+        val callback =
+            KmbWriteCallback { _, pointer, size ->
+                try {
+                    if (pointer == null || size <= 0 || !consumer(pointer.getByteArray(0L, size))) 1 else 0
+                } catch (failure: Throwable) {
+                    callbackFailure.compareAndSet(null, failure)
+                    1
+                }
+            }
+        val result =
+            api.kmb_transcode_avfoundation_fragmented_mp4_stream(
+                inputLocator,
+                fragmentDurationUs,
+                startTimeUs,
+                preferredVideoTrackId,
+                preferredAudioTrackId,
+                preferredSubtitleTrackId,
+                callback,
+                null,
+                outputError,
+            )
+        val errorText = takeOwnedString(outputError.value)
+        callbackFailure.get()?.let { throw it }
+        if (result != KMB_OK && result != KMB_CANCELLED) {
+            throw MediaBridgeException(
+                MediaBridgeErrorCode.CONVERSION_FAILED,
+                errorText.ifBlank { "The native AVFoundation compatibility conversion failed without exposing the input locator." },
+            )
+        }
+    }
+
     private fun takeOwnedString(pointer: Pointer?): String {
         if (pointer == null) return ""
         return try {
@@ -362,8 +416,14 @@ internal object DesktopRuntimeLoader {
             reject("The loaded FFmpeg license does not match the signed runtime manifest.")
         }
         val expectedFeatures =
-            "{\"subtitleBurnIn\":${manifest.capabilities.canBurnSubtitles}," +
-                "\"hdrToSdrToneMap\":${manifest.capabilities.canToneMapToSdr}}"
+            buildString {
+                append("{\"subtitleBurnIn\":${manifest.capabilities.canBurnSubtitles},")
+                append("\"hdrToSdrToneMap\":${manifest.capabilities.canToneMapToSdr}")
+                if (manifest.capabilities.canTranscodeAudio) {
+                    append(",\"avFoundationCompatibility\":true")
+                }
+                append('}')
+            }
         if (actualFeatures != expectedFeatures) {
             reject("The loaded native feature set does not match the signed runtime manifest.")
         }

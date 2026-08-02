@@ -19,8 +19,9 @@ from pathlib import Path
 FORBIDDEN = ("--enable-gpl", "--enable-nonfree", "--enable-libx264", "--enable-libx265")
 REQUIRED_DYNAMIC_LIBRARIES = ("libavformat", "libavcodec", "libavutil")
 SUBTITLE_DYNAMIC_LIBRARIES = ("libavfilter", "libswscale")
+AVFOUNDATION_DYNAMIC_LIBRARIES = ("libswresample",)
 PRIVATE_FFMPEG_IDENTITY = re.compile(
-    r"(?:lib)?(?:avformat|avcodec|avutil|avfilter|swscale)-kmb(?:[.-]|$)",
+    r"(?:lib)?(?:avformat|avcodec|avutil|avfilter|swscale|swresample)-kmb(?:[.-]|$)",
     re.IGNORECASE,
 )
 
@@ -37,12 +38,12 @@ def inspect_ffmpeg_dependency_identities(dependencies: str, target: str) -> list
         for line in dependency_lines
         if any(
             name.removeprefix("lib") in line.lower()
-            for name in REQUIRED_DYNAMIC_LIBRARIES + SUBTITLE_DYNAMIC_LIBRARIES
+            for name in REQUIRED_DYNAMIC_LIBRARIES + SUBTITLE_DYNAMIC_LIBRARIES + AVFOUNDATION_DYNAMIC_LIBRARIES
         )
     ]
     linked = [
         name
-        for name in REQUIRED_DYNAMIC_LIBRARIES + SUBTITLE_DYNAMIC_LIBRARIES
+        for name in REQUIRED_DYNAMIC_LIBRARIES + SUBTITLE_DYNAMIC_LIBRARIES + AVFOUNDATION_DYNAMIC_LIBRARIES
         if any(name.removeprefix("lib") in line.lower() for line in ffmpeg_dependency_lines)
     ]
     if not set(REQUIRED_DYNAMIC_LIBRARIES).issubset(linked):
@@ -163,6 +164,7 @@ def main() -> int:
             "kmb_remux_fragmented_mp4_stream",
             "kmb_burn_subtitles_fragmented_mp4_stream",
             "kmb_tone_map_hdr_to_sdr_fragmented_mp4_stream",
+            "kmb_transcode_avfoundation_fragmented_mp4_stream",
         )
         if not all(symbol in exports for symbol in required_exports):
             print("runtime inspection error: required C ABI exports are missing", file=sys.stderr)
@@ -173,7 +175,8 @@ def main() -> int:
         )
         license_match = re.search(r"LGPL version [^\r\n]+", dll_text)
         feature_match = re.search(
-            r'\{"subtitleBurnIn":(?:true|false),"hdrToSdrToneMap":(?:true|false)\}',
+            r'\{"subtitleBurnIn":(?:true|false),"hdrToSdrToneMap":(?:true|false)'
+            r'(?:,"avFoundationCompatibility":true)?\}',
             dll_text,
         )
         if feature_match is None:
@@ -218,6 +221,14 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    avfoundation_links_present = set(AVFOUNDATION_DYNAMIC_LIBRARIES).issubset(dynamic_libraries)
+    avfoundation_feature_enabled = bool(runtime_features.get("avFoundationCompatibility"))
+    if avfoundation_feature_enabled != (subtitle_links_present and avfoundation_links_present):
+        print(
+            "runtime inspection error: AVFoundation feature and dynamic conversion libraries differ",
+            file=sys.stderr,
+        )
+        return 1
     if "--disable-gpl" not in configuration or "--disable-nonfree" not in configuration:
         print("runtime inspection error: fail-closed disable flags are missing", file=sys.stderr)
         return 1
@@ -237,6 +248,8 @@ def main() -> int:
         ),
         "canBurnSubtitles": bool(runtime_features.get("subtitleBurnIn")),
         "canToneMapToSdr": bool(runtime_features.get("hdrToSdrToneMap")),
+        "canTranscodeVideo": avfoundation_feature_enabled,
+        "canTranscodeAudio": avfoundation_feature_enabled,
     }
     arguments.output.parent.mkdir(parents=True, exist_ok=True)
     arguments.output.write_text(json.dumps(inspection, indent=2, sort_keys=True) + "\n", encoding="utf-8")

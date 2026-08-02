@@ -5,17 +5,22 @@ project(kmediabridge LANGUAGES C)
 include(CTest)
 
 option(KMB_ENABLE_HDR_TO_SDR "Build the optional controlled HDR-to-SDR transcoder" OFF)
+option(KMB_ENABLE_AVFOUNDATION_TRANSCODE "Build the optional AVC/AAC AVFoundation compatibility transcoder" OFF)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat libavcodec libavutil)
 if(KMB_ENABLE_HDR_TO_SDR)
     pkg_check_modules(FFMPEG_HDR REQUIRED IMPORTED_TARGET libswscale)
 endif()
+if(KMB_ENABLE_AVFOUNDATION_TRANSCODE)
+    pkg_check_modules(FFMPEG_AVFOUNDATION REQUIRED IMPORTED_TARGET libavfilter libswscale libswresample)
+endif()
 
 add_library(
     kmediabridge
     SHARED
     src/kmedia_bridge.c
+    src/kmedia_bridge_avfoundation.c
     src/kmedia_bridge_subtitles.c
     src/kmedia_bridge_hdr_math.c
     src/kmedia_bridge_tonemap.c
@@ -25,6 +30,16 @@ target_link_libraries(kmediabridge PRIVATE PkgConfig::FFMPEG)
 if(KMB_ENABLE_HDR_TO_SDR)
     target_compile_definitions(kmediabridge PRIVATE KMB_ENABLE_HDR_TO_SDR=1)
     target_link_libraries(kmediabridge PRIVATE PkgConfig::FFMPEG_HDR)
+endif()
+if(KMB_ENABLE_AVFOUNDATION_TRANSCODE)
+    target_compile_definitions(
+        kmediabridge
+        PRIVATE
+            KMB_ENABLE_AVFOUNDATION_TRANSCODE=1
+            KMB_ENABLE_SUBTITLE_BURN_IN=1
+            KMB_ENABLE_HDR_TO_SDR=1
+    )
+    target_link_libraries(kmediabridge PRIVATE PkgConfig::FFMPEG_AVFOUNDATION)
 endif()
 if(UNIX)
     target_link_libraries(kmediabridge PRIVATE m)
