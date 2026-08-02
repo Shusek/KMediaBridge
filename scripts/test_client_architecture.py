@@ -41,7 +41,7 @@ class ClientArchitectureTest(unittest.TestCase):
 
     def test_transitive_runtime_pom_verifier_supports_maven_namespaces(self) -> None:
         version = "0.5.0-rc.1"
-        runtime_version = "0.1.0-rc.4"
+        runtime_version = "0.1.0-rc.5"
         with tempfile.TemporaryDirectory() as temporary:
             staging = Path(temporary)
             for artifact, runtime_artifact in (
@@ -86,7 +86,7 @@ class ClientArchitectureTest(unittest.TestCase):
                 (source / "runtime/libkmediabridge.so").write_bytes(b"client")
                 (source / "manifest.properties").write_text("\n".join((
                     f"platform={target}",
-                    "sharedRuntimeId=kmediaffmpeg-8.1.2-ass-0.17.5-78fbb23ab073fc90",
+                    "sharedRuntimeId=kmediaffmpeg-8.1.2-ass-0.17.5-d19180298319acbc",
                     "buildRecipeRevision=0123456789abcdef0123456789abcdef01234567",
                     "sourceOfferUrl=https://example.invalid/source.tar.gz",
                     "sourceSha256=" + "a" * 64,

@@ -73,7 +73,7 @@ class DesktopFfmpegRuntimeInspectorTest {
         schemaVersion=1
         platform=$platform
         abiVersion=4
-        sharedRuntimeId=kmediaffmpeg-8.1.2-ass-0.17.5-78fbb23ab073fc90
+        sharedRuntimeId=kmediaffmpeg-8.1.2-ass-0.17.5-d19180298319acbc
         ffmpegVersion=8.1.2
         ffmpegLicenseSpdx=LGPL-2.1-or-later
         ffmpegReportedLicense=LGPL version 2.1 or later

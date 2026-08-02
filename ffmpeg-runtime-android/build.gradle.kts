@@ -50,7 +50,7 @@ plugins {
     alias(libs.plugins.vanniktech.maven.publish)
 }
 
-val ffmpegRuntimeVersion = "0.1.0-rc.4"
+val ffmpegRuntimeVersion = "0.1.0-rc.5"
 val nativePayload =
     providers
         .gradleProperty("kmediaBridgeAndroidNativePayloadDirectory")
