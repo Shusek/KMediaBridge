@@ -21,6 +21,39 @@ static inline int kmb_valid_rate(AVRational rate) {
     return rate.num > 0 && rate.den > 0;
 }
 
+/*
+ * Timestamped playback restarts expose a source timeline that may begin many
+ * minutes or hours after zero. CMAF consumers must not wait through that gap.
+ * Keep the shared conversion in microseconds so audio and video use one
+ * origin even when their stream time bases differ.
+ */
+static inline int kmb_timestamp_precedes_origin(
+    int64_t timestamp,
+    AVRational time_base,
+    int64_t origin_us
+) {
+    if (timestamp == AV_NOPTS_VALUE || origin_us <= 0 || !kmb_valid_rate(time_base)) {
+        return 0;
+    }
+    return av_rescale_q(timestamp, time_base, AV_TIME_BASE_Q) < origin_us;
+}
+
+static inline int64_t kmb_rebase_timestamp(
+    int64_t timestamp,
+    AVRational time_base,
+    int64_t origin_us
+) {
+    int64_t relative_us = 0;
+    if (timestamp == AV_NOPTS_VALUE || origin_us <= 0 || !kmb_valid_rate(time_base)) {
+        return timestamp;
+    }
+    relative_us = av_rescale_q(timestamp, time_base, AV_TIME_BASE_Q) - origin_us;
+    if (relative_us < 0) {
+        relative_us = 0;
+    }
+    return av_rescale_q(relative_us, AV_TIME_BASE_Q, time_base);
+}
+
 static inline AVRational kmb_stream_frame_rate(const AVStream *stream) {
     if (kmb_valid_rate(stream->avg_frame_rate)) {
         return stream->avg_frame_rate;
