@@ -34,6 +34,12 @@ Android uses `AndroidFfmpegNativeDriver.load()` and supports only `arm64-v8a` an
 
 KMediaBridge is not an iOS backend. Its common API may be consumed by iOS source sets, but no KMediaBridge native client is published there.
 
+The macOS and Windows desktop clients enable their full conversion path only
+when the selected shared-runtime manifest authenticates it. That path can
+tone-map explicit PQ/HLG to SDR, compose selected text subtitles, and convert
+legacy SDR AVI/ASF and WMA-family media to platform-compatible AVC/AAC
+fragmented MP4. Older shared runtimes keep Windows in remux-only mode.
+
 ## One process, one runtime
 
 Before loading the bridge, KMediaBridge initializes `KMediaFfmpegRuntime` and

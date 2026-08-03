@@ -17,11 +17,12 @@ An RC may use KMediaFfmpegRuntime's path-free pure-ARMv7 native graph report
 when no API 28 ARMv7 device is available. This exception never permits x86 and
 does not satisfy the stable-release device, framework, or MediaCodec matrix.
 
-The AVFoundation-compatible macOS client must authenticate its native feature,
-dynamically link the shared runtime's `swresample` boundary, and advertise both
-video and audio transcoding. Its client manifest must include AVI and ASF input
-capabilities; release verification rejects a partial declaration. The shared
-runtime remains solely responsible for FFmpeg configuration, component and
-source evidence, SBOM, signing, and replacement artifacts.
+Full desktop compatibility clients on macOS and Windows must authenticate their
+native features, dynamically link the shared runtime's `avfilter`, `swscale`
+and `swresample` boundaries, and advertise both video and audio transcoding.
+Their client manifests must include AVI and ASF input capabilities; release
+verification rejects a partial declaration. The shared runtime remains solely
+responsible for FFmpeg configuration, component and source evidence, SBOM,
+signing, and replacement artifacts.
 
 The API/backend retain `LicenseRef-KMediaBridge-Internal`; source files explicitly marked `LGPL-2.1-or-later` retain that license. See the root license map and `LICENSES/` for exact terms.

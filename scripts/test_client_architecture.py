@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import subprocess
 import sys
 import tempfile
@@ -11,9 +12,30 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+BUILD_SPEC = importlib.util.spec_from_file_location("kmediabridge_build_client", ROOT / "native/build-client.py")
+BUILD_CLIENT = importlib.util.module_from_spec(BUILD_SPEC)
+assert BUILD_SPEC.loader is not None
+BUILD_SPEC.loader.exec_module(BUILD_CLIENT)
 
 
 class ClientArchitectureTest(unittest.TestCase):
+    def test_windows_full_features_are_bound_to_the_shared_runtime_manifest(self) -> None:
+        self.assertEqual(
+            {"toneMap": False, "subtitleBurn": False, "avcAacTranscode": False},
+            BUILD_CLIENT.target_features("windows-x86_64", {}),
+        )
+        self.assertEqual(
+            {"toneMap": True, "subtitleBurn": True, "avcAacTranscode": True},
+            BUILD_CLIENT.target_features(
+                "windows-x86_64",
+                {
+                    "feature.hdrToSdrToneMap": "true",
+                    "feature.subtitleBurnIn": "true",
+                    "feature.avcAacTranscode": "true",
+                },
+            ),
+        )
+
     def test_client_builder_is_shared_runtime_only(self) -> None:
         source = (ROOT / "native/build-client.py").read_text()
         self.assertIn("--runtime-sdk", source)

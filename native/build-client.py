@@ -26,6 +26,7 @@ ANDROID = {
     "android-armeabi-v7a": ("armeabi-v7a", "armv7a-linux-androideabi", "ARM"),
 }
 RUNTIME_ID = re.compile(r"kmediaffmpeg-8\.1\.2-ass-0\.17\.5-[0-9a-f]{16}")
+FULL_DESKTOP_TARGETS = {"macos-aarch64", "windows-x86_64"}
 
 
 def run(*command: str) -> str:
@@ -85,6 +86,30 @@ def runtime_contract(sdk: Path, target: str, expected_version: str) -> dict[str,
     return manifest
 
 
+def target_features(target: str, runtime: dict[str, str]) -> dict[str, bool]:
+    legacy_defaults = {
+        "hdrToSdrToneMap": target in ANDROID or target == "macos-aarch64",
+        "subtitleBurnIn": target == "macos-aarch64",
+        "avcAacTranscode": target == "macos-aarch64",
+    }
+
+    def enabled(name: str) -> bool:
+        value = runtime.get(f"feature.{name}")
+        if value is None:
+            return legacy_defaults[name]
+        if value not in {"true", "false"}:
+            raise ValueError(f"runtime SDK has an invalid feature.{name} value")
+        return value == "true"
+
+    tone_map_target = target in ANDROID or target in FULL_DESKTOP_TARGETS
+    full_desktop_target = target in FULL_DESKTOP_TARGETS
+    return {
+        "toneMap": tone_map_target and enabled("hdrToSdrToneMap"),
+        "subtitleBurn": full_desktop_target and enabled("subtitleBurnIn"),
+        "avcAacTranscode": full_desktop_target and enabled("avcAacTranscode"),
+    }
+
+
 def android_tools(ndk: Path, target: str) -> dict[str, str]:
     abi, triple, _ = ANDROID[target]
     host = "darwin-x86_64" if platform.system() == "Darwin" else "linux-x86_64"
@@ -101,7 +126,13 @@ def android_tools(ndk: Path, target: str) -> dict[str, str]:
     return values
 
 
-def compile_client(target: str, sdk: Path, output: Path, ndk: Path | None) -> tuple[Path, str | None]:
+def compile_client(
+    target: str,
+    sdk: Path,
+    output: Path,
+    ndk: Path | None,
+    feature_policy: dict[str, bool],
+) -> tuple[Path, str | None]:
     runtime = output / "runtime"
     runtime.mkdir()
     sources = [
@@ -112,22 +143,21 @@ def compile_client(target: str, sdk: Path, output: Path, ndk: Path | None) -> tu
         ROOT / "native/src/kmedia_bridge_avfoundation.c",
     ]
     includes = ["-I", str(ROOT / "native/include"), "-I", str(ROOT / "native/src"), "-I", str(sdk / "include")]
-    features: list[str] = []
+    compile_definitions: list[str] = []
     feature_libraries: list[str] = []
-    if target in ANDROID or target == "macos-aarch64":
-        features.append("-DKMB_ENABLE_HDR_TO_SDR=1")
-    if target == "macos-aarch64":
-        features.extend([
-            "-DKMB_ENABLE_SUBTITLE_BURN_IN=1",
-            "-DKMB_ENABLE_AVFOUNDATION_TRANSCODE=1",
-        ])
-        feature_libraries.extend([
-            "-lkmediaffmpeg_avfilter",
-            "-lkmediaffmpeg_swresample",
-        ])
+    if feature_policy["toneMap"]:
+        compile_definitions.append("-DKMB_ENABLE_HDR_TO_SDR=1")
+    if feature_policy["subtitleBurn"]:
+        compile_definitions.append("-DKMB_ENABLE_SUBTITLE_BURN_IN=1")
+    if feature_policy["avcAacTranscode"]:
+        compile_definitions.append("-DKMB_ENABLE_AVFOUNDATION_TRANSCODE=1")
+    if feature_policy["subtitleBurn"] or feature_policy["avcAacTranscode"]:
+        feature_libraries.append("-lkmediaffmpeg_avfilter")
+    if feature_policy["avcAacTranscode"]:
+        feature_libraries.append("-lkmediaffmpeg_swresample")
     common = [
         "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-fvisibility=hidden",
-        *features, *includes, *(str(source) for source in sources),
+        *compile_definitions, *includes, *(str(source) for source in sources),
         "-L", str(sdk / "lib"), "-lkmediaffmpeg_avformat", "-lkmediaffmpeg_avcodec",
         "-lkmediaffmpeg_swscale", "-lkmediaffmpeg_avutil", *feature_libraries, "-lm",
     ]
@@ -176,10 +206,11 @@ def write_manifest(
     revision: str,
     runtime_version: str,
     runtime_source_sha256: str,
+    features: dict[str, bool],
 ) -> None:
-    tone_map = target in ANDROID or target == "macos-aarch64"
-    subtitle_burn = target == "macos-aarch64"
-    avfoundation_compatibility = target == "macos-aarch64"
+    tone_map = features["toneMap"]
+    subtitle_burn = features["subtitleBurn"]
+    avfoundation_compatibility = features["avcAacTranscode"]
     input_containers = ["MATROSKA", "WEBM", "MP4", "FRAGMENTED_MP4", "MPEG_TS"]
     if avfoundation_compatibility:
         input_containers.extend(["AVI", "ASF"])
@@ -239,7 +270,14 @@ def main() -> int:
         raise ValueError("output already exists")
     output.mkdir(parents=True)
     runtime = runtime_contract(sdk, arguments.target, arguments.runtime_version)
-    library, readelf = compile_client(arguments.target, sdk, output, arguments.ndk.resolve() if arguments.ndk else None)
+    features = target_features(arguments.target, runtime)
+    library, readelf = compile_client(
+        arguments.target,
+        sdk,
+        output,
+        arguments.ndk.resolve() if arguments.ndk else None,
+        features,
+    )
     write_manifest(
         output,
         arguments.target,
@@ -248,6 +286,7 @@ def main() -> int:
         arguments.revision,
         arguments.runtime_version,
         arguments.runtime_source_sha256,
+        features,
     )
     client_sdk = output / "sdk" / arguments.target
     (client_sdk / "include").mkdir(parents=True)

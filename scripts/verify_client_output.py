@@ -68,9 +68,31 @@ def main() -> int:
     )
     if manifest.get("sourceOfferUrl") != expected_source or not SHA256.fullmatch(manifest.get("sourceSha256", "")):
         raise ValueError("KMediaBridge client has incomplete shared-runtime source evidence")
-    tone_map = args.target.startswith("android-") or args.target == "macos-aarch64"
-    subtitle_burn = args.target == "macos-aarch64"
-    avfoundation_compatibility = args.target == "macos-aarch64"
+    shared_runtime = props(args.output / "compliance/kmediaffmpeg-runtime.properties")
+
+    def runtime_feature(name: str, legacy_default: bool) -> bool:
+        value = shared_runtime.get(f"feature.{name}")
+        if value is None:
+            return legacy_default
+        if value not in {"true", "false"}:
+            raise ValueError(f"shared runtime has an invalid feature.{name} value")
+        return value == "true"
+
+    full_desktop = args.target in {"macos-aarch64", "windows-x86_64"}
+    tone_map = (
+        args.target.startswith("android-") or full_desktop
+    ) and runtime_feature(
+        "hdrToSdrToneMap",
+        args.target.startswith("android-") or args.target == "macos-aarch64",
+    )
+    subtitle_burn = full_desktop and runtime_feature(
+        "subtitleBurnIn",
+        args.target == "macos-aarch64",
+    )
+    avfoundation_compatibility = full_desktop and runtime_feature(
+        "avcAacTranscode",
+        args.target == "macos-aarch64",
+    )
     if manifest.get("capability.canToneMapToSdr") != str(tone_map).lower():
         raise ValueError("tone-map capability differs from the compiled target policy")
     if manifest.get("capability.canTranscodeVideo") != str(tone_map).lower():
@@ -97,7 +119,7 @@ def main() -> int:
         raise ValueError("KMediaBridge client architecture differs from policy")
     if FORBIDDEN.search(dependencies) or "kmediaffmpeg_avutil" not in dependencies:
         raise ValueError("KMediaBridge client is not linked only to the shared runtime ABI")
-    if ("kmediaffmpeg_avfilter" in dependencies) != (args.target == "macos-aarch64"):
+    if ("kmediaffmpeg_avfilter" in dependencies) != (subtitle_burn or avfoundation_compatibility):
         raise ValueError("KMediaBridge subtitle-filter linkage differs from target policy")
     if ("kmediaffmpeg_swresample" in dependencies) != avfoundation_compatibility:
         raise ValueError("KMediaBridge audio-conversion linkage differs from target policy")
