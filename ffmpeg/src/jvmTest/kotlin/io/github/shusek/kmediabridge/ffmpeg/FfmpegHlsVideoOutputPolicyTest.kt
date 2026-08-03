@@ -60,6 +60,11 @@ class FfmpegHlsVideoOutputPolicyTest {
         assertEquals(AudioHandling.TRANSCODE_AAC, request.resolveAudioHandling())
     }
 
+    @Test
+    fun defaultPlaylistHistoryDoesNotAssumeFourSecondFragments() {
+        assertEquals(256, request(FfmpegHlsVideoOutputPolicy.PRESERVE_SOURCE).maxBufferedFragments)
+    }
+
     private fun request(policy: FfmpegHlsVideoOutputPolicy): FfmpegHlsPlaybackRequest =
         FfmpegHlsPlaybackRequest(
             input = MediaInput("/tmp/movie.mkv", MediaInputKind.FILE),

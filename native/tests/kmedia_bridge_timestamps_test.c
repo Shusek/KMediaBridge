@@ -68,9 +68,22 @@ static void test_audio_preserves_negative_start_and_fills_missing_values(void) {
     assert(second.pts == second.dts);
 }
 
+static void test_timestamped_restart_rebases_media_to_zero(void) {
+    const AVRational milliseconds = {1, 1000};
+    const int64_t origin_us = 120000000;
+
+    assert(kmb_timestamp_precedes_origin(119999, milliseconds, origin_us));
+    assert(!kmb_timestamp_precedes_origin(120000, milliseconds, origin_us));
+    assert(kmb_rebase_timestamp(120000, milliseconds, origin_us) == 0);
+    assert(kmb_rebase_timestamp(120375, milliseconds, origin_us) == 375);
+    assert(kmb_rebase_timestamp(120375, milliseconds, 0) == 120375);
+    assert(kmb_rebase_timestamp(AV_NOPTS_VALUE, milliseconds, origin_us) == AV_NOPTS_VALUE);
+}
+
 int main(void) {
     test_reordered_video_without_dts();
     test_audio_preserves_negative_start_and_fills_missing_values();
+    test_timestamped_restart_rebases_media_to_zero();
     puts("KMEDIA_BRIDGE_TIMESTAMP_TEST_OK");
     return 0;
 }

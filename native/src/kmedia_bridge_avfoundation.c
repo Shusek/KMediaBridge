@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include "kmedia_bridge.h"
+#include "kmedia_bridge_timestamps.h"
 
 #include <libavutil/mem.h>
 
@@ -63,6 +64,7 @@ typedef struct KmbAvfPipeline {
     int video_pts_initialized;
     int64_t next_audio_pts;
     int audio_pts_initialized;
+    int64_t requested_start_time_us;
     KmbAvfWriteState write_state;
 } KmbAvfPipeline;
 
@@ -748,6 +750,11 @@ static KmbResult kmb_avf_encode_filtered_video(KmbAvfPipeline *pipeline, char **
                 sink_time_base,
                 pipeline->video_encoder->time_base
             );
+            pipeline->video_filtered_frame->pts = kmb_rebase_timestamp(
+                pipeline->video_filtered_frame->pts,
+                pipeline->video_encoder->time_base,
+                pipeline->requested_start_time_us
+            );
         }
         if (!pipeline->video_pts_initialized) {
             if (pipeline->video_filtered_frame->pts == AV_NOPTS_VALUE) {
@@ -788,6 +795,7 @@ static KmbResult kmb_avf_decode_video_packet(
     const AVPacket *packet,
     char **output_error
 ) {
+    AVStream *input_stream = pipeline->input->streams[pipeline->selected_video_track_id];
     int result = avcodec_send_packet(pipeline->video_decoder, packet);
     if (result < 0) {
         kmb_avf_set_av_error(output_error, "Could not submit a compressed video packet", result);
@@ -795,7 +803,17 @@ static KmbResult kmb_avf_decode_video_packet(
     }
     while ((result = avcodec_receive_frame(pipeline->video_decoder, pipeline->video_decoded_frame)) >= 0) {
         KmbResult bridge_result = KMB_OK;
-        pipeline->video_decoded_frame->pts = pipeline->video_decoded_frame->best_effort_timestamp;
+        int64_t source_pts = pipeline->video_decoded_frame->best_effort_timestamp;
+        if (kmb_timestamp_precedes_origin(
+                source_pts,
+                input_stream->time_base,
+                pipeline->requested_start_time_us
+            )) {
+            av_frame_unref(pipeline->video_decoded_frame);
+            continue;
+        }
+        /* Preserve source time through the subtitle filter; rebase only before encoding. */
+        pipeline->video_decoded_frame->pts = source_pts;
         result = av_buffersrc_add_frame_flags(
             pipeline->video_buffer_source,
             pipeline->video_decoded_frame,
@@ -961,12 +979,25 @@ static KmbResult kmb_avf_decode_audio_packet(
     }
     while ((result = avcodec_receive_frame(pipeline->audio_decoder, pipeline->audio_decoded_frame)) >= 0) {
         KmbResult bridge_result = KMB_OK;
+        int64_t source_pts = pipeline->audio_decoded_frame->best_effort_timestamp;
+        if (kmb_timestamp_precedes_origin(
+                source_pts,
+                input_stream->time_base,
+                pipeline->requested_start_time_us
+            )) {
+            av_frame_unref(pipeline->audio_decoded_frame);
+            continue;
+        }
         if (!pipeline->audio_pts_initialized) {
-            int64_t source_pts = pipeline->audio_decoded_frame->best_effort_timestamp;
+            int64_t rebased_pts = kmb_rebase_timestamp(
+                source_pts,
+                input_stream->time_base,
+                pipeline->requested_start_time_us
+            );
             pipeline->next_audio_pts =
-                source_pts == AV_NOPTS_VALUE
+                rebased_pts == AV_NOPTS_VALUE
                     ? 0
-                    : av_rescale_q(source_pts, input_stream->time_base, pipeline->audio_encoder->time_base);
+                    : av_rescale_q(rebased_pts, input_stream->time_base, pipeline->audio_encoder->time_base);
             pipeline->audio_pts_initialized = 1;
         }
         bridge_result = kmb_avf_queue_converted_audio(pipeline, pipeline->audio_decoded_frame, output_error);
@@ -1139,6 +1170,7 @@ KmbResult kmb_transcode_avfoundation_fragmented_mp4_stream(
         kmb_avf_set_error(output_error, "Valid input, callback, track ids, duration, and start time are required.");
         return KMB_INVALID_ARGUMENT;
     }
+    pipeline.requested_start_time_us = start_time_us;
     pipeline.write_state = (KmbAvfWriteState){write_callback, opaque, 0};
     bridge_result = kmb_avf_open_input(
         &pipeline,

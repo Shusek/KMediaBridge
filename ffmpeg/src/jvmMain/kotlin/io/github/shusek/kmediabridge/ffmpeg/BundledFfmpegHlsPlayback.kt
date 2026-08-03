@@ -64,7 +64,9 @@ public data class FfmpegHlsPlaybackRequest(
     public val videoOutputPolicy: FfmpegHlsVideoOutputPolicy = FfmpegHlsVideoOutputPolicy.PRESERVE_SOURCE,
     public val startTimeUs: Long = 0L,
     public val fragmentDurationUs: Long = 4_000_000L,
-    public val maxBufferedFragments: Int = 12,
+    // FFmpeg may cut at keyframes before the requested fragment duration. A small fragment-count
+    // window can therefore evict the consumer's current VOD position even while byte usage is low.
+    public val maxBufferedFragments: Int = 256,
     public val maxBufferedBytes: Long = 96L * 1024L * 1024L,
 ) {
     init {
