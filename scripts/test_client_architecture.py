@@ -19,6 +19,17 @@ BUILD_SPEC.loader.exec_module(BUILD_CLIENT)
 
 
 class ClientArchitectureTest(unittest.TestCase):
+    def test_pull_request_ci_builds_and_loads_the_windows_client(self) -> None:
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+
+        self.assertIn("target: windows-x86_64", workflow)
+        self.assertIn("runner: windows-2025", workflow)
+        self.assertIn("Load the one shared runtime and bridge in one Windows process", workflow)
+        self.assertIn(
+            "-PkmediaBridgeTestRuntimeSdk=$env:RUNNER_TEMP\\runtime\\sdk\\windows-x86_64",
+            workflow,
+        )
+
     def test_windows_full_features_are_bound_to_the_shared_runtime_manifest(self) -> None:
         self.assertEqual(
             {"toneMap": False, "subtitleBurn": False, "avcAacTranscode": False},
