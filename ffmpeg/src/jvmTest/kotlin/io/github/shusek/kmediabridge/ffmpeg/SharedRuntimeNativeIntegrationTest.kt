@@ -20,13 +20,20 @@ class SharedRuntimeNativeIntegrationTest {
             KMediaFfmpegRuntime.initialize(
                 RuntimeSource.externalDirectory(Path.of(runtimeSdk).toFile()),
             )
+        val osName = System.getProperty("os.name", "").lowercase()
+        val (platformId, libraryName) =
+            when {
+                "win" in osName -> "windows-x86_64" to "kmediabridge.dll"
+                "mac" in osName || "darwin" in osName -> "macos-aarch64" to "libkmediabridge.dylib"
+                else -> error("The shared-runtime integration test does not support this host.")
+            }
         val resources = Files.createTempDirectory("kmediabridge-shared-runtime-test-")
-        val platform = resources.resolve("META-INF/kmediabridge/native/macos-aarch64")
+        val platform = resources.resolve("META-INF/kmediabridge/native/$platformId")
         Files.createDirectories(platform)
         Files.copy(Path.of(clientOutput, "manifest.properties"), platform.resolve("manifest.properties"))
         Files.copy(
-            Path.of(clientOutput, "runtime/libkmediabridge.dylib"),
-            platform.resolve("libkmediabridge.dylib"),
+            Path.of(clientOutput, "runtime", libraryName),
+            platform.resolve(libraryName),
         )
         URLClassLoader(arrayOf(resources.toUri().toURL()), javaClass.classLoader).use { loader ->
             val driver = BundledFfmpegNativeDriver.load(classLoader = loader)
