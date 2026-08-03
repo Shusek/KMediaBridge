@@ -74,7 +74,7 @@ class ClientArchitectureTest(unittest.TestCase):
 
     def test_transitive_runtime_pom_verifier_supports_maven_namespaces(self) -> None:
         version = "0.5.0-rc.1"
-        runtime_version = "0.1.0-rc.5"
+        runtime_version = "0.1.0-rc.6"
         with tempfile.TemporaryDirectory() as temporary:
             staging = Path(temporary)
             for artifact, runtime_artifact in (
