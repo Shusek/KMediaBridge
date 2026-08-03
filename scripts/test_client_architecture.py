@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import subprocess
 import sys
 import tempfile
@@ -11,9 +12,41 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+BUILD_SPEC = importlib.util.spec_from_file_location("kmediabridge_build_client", ROOT / "native/build-client.py")
+BUILD_CLIENT = importlib.util.module_from_spec(BUILD_SPEC)
+assert BUILD_SPEC.loader is not None
+BUILD_SPEC.loader.exec_module(BUILD_CLIENT)
 
 
 class ClientArchitectureTest(unittest.TestCase):
+    def test_pull_request_ci_builds_and_loads_the_windows_client(self) -> None:
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+
+        self.assertIn("target: windows-x86_64", workflow)
+        self.assertIn("runner: windows-2025", workflow)
+        self.assertIn("Load the one shared runtime and bridge in one Windows process", workflow)
+        self.assertIn(
+            "-PkmediaBridgeTestRuntimeSdk=$env:RUNNER_TEMP\\runtime\\sdk\\windows-x86_64",
+            workflow,
+        )
+
+    def test_windows_full_features_are_bound_to_the_shared_runtime_manifest(self) -> None:
+        self.assertEqual(
+            {"toneMap": False, "subtitleBurn": False, "avcAacTranscode": False},
+            BUILD_CLIENT.target_features("windows-x86_64", {}),
+        )
+        self.assertEqual(
+            {"toneMap": True, "subtitleBurn": True, "avcAacTranscode": True},
+            BUILD_CLIENT.target_features(
+                "windows-x86_64",
+                {
+                    "feature.hdrToSdrToneMap": "true",
+                    "feature.subtitleBurnIn": "true",
+                    "feature.avcAacTranscode": "true",
+                },
+            ),
+        )
+
     def test_client_builder_is_shared_runtime_only(self) -> None:
         source = (ROOT / "native/build-client.py").read_text()
         self.assertIn("--runtime-sdk", source)
@@ -41,7 +74,7 @@ class ClientArchitectureTest(unittest.TestCase):
 
     def test_transitive_runtime_pom_verifier_supports_maven_namespaces(self) -> None:
         version = "0.5.0-rc.1"
-        runtime_version = "0.1.0-rc.5"
+        runtime_version = "0.1.0-rc.6"
         with tempfile.TemporaryDirectory() as temporary:
             staging = Path(temporary)
             for artifact, runtime_artifact in (

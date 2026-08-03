@@ -70,7 +70,7 @@ typedef struct KmbAvfPipeline {
 
 static void kmb_avf_set_error(char **output_error, const char *message) {
     if (output_error != NULL) {
-        *output_error = av_strdup(message != NULL ? message : "Unknown AVFoundation conversion error.");
+        *output_error = av_strdup(message != NULL ? message : "Unknown AVC/AAC compatibility conversion error.");
     }
 }
 
@@ -243,7 +243,7 @@ static KmbResult kmb_avf_open_input(
     if (kmb_avf_is_hdr(pipeline->input->streams[pipeline->selected_video_track_id]->codecpar)) {
         kmb_avf_set_error(
             output_error,
-            "The AVFoundation compatibility path accepts SDR input; explicit HDR must use the controlled tone mapper."
+            "The AVC/AAC compatibility path accepts SDR input; explicit HDR must use the controlled tone mapper."
         );
         return KMB_UNSUPPORTED;
     }
@@ -1224,7 +1224,7 @@ KmbResult kmb_transcode_avfoundation_fragmented_mp4_stream(
             pipeline.video_decoded_frame == NULL || pipeline.video_filtered_frame == NULL ||
             (pipeline.audio_decoder != NULL &&
                 (pipeline.audio_packet == NULL || pipeline.audio_decoded_frame == NULL))) {
-            kmb_avf_set_error(output_error, "Could not allocate AVFoundation conversion frames and packets.");
+            kmb_avf_set_error(output_error, "Could not allocate compatibility conversion frames and packets.");
             bridge_result = KMB_ALLOCATION_FAILED;
         }
     }
@@ -1257,7 +1257,7 @@ KmbResult kmb_transcode_avfoundation_fragmented_mp4_stream(
     (void)write_callback;
     (void)opaque;
     if (output_error != NULL) {
-        *output_error = av_strdup("This runtime does not include AVFoundation compatibility transcoding.");
+        *output_error = av_strdup("This runtime does not include AVC/AAC compatibility transcoding.");
     }
     return KMB_UNSUPPORTED;
 }

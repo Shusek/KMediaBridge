@@ -106,10 +106,11 @@ KMB_EXPORT KmbResult kmb_tone_map_hdr_to_sdr_fragmented_mp4_stream(
 );
 
 /*
- * Converts a local SDR source to AVFoundation-compatible AVC/AAC fragmented
- * MP4. A subtitle id of -2 omits subtitles; otherwise the selected text track
- * is composited through libass. This is an additive ABI 4 entry point and is
- * callable only when avFoundationCompatibility is advertised by the runtime.
+ * Converts a local SDR source to platform-compatible AVC/AAC fragmented MP4.
+ * A subtitle id of -2 omits subtitles; otherwise the selected text track is
+ * composited through libass. This is an additive ABI 4 entry point and is
+ * callable only when the legacy avFoundationCompatibility feature key is
+ * advertised by the runtime. ABI 4 retains that key for both macOS and Windows.
  */
 KMB_EXPORT KmbResult kmb_transcode_avfoundation_fragmented_mp4_stream(
     const char *input_locator,

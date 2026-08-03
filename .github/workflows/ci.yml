@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  RUNTIME_VERSION: 0.1.0-rc.5
+  RUNTIME_VERSION: 0.1.0-rc.6
 
 jobs:
   source:
@@ -33,6 +33,7 @@ jobs:
       matrix:
         include:
           - { target: macos-aarch64, runner: macos-15, shell: bash }
+          - { target: windows-x86_64, runner: windows-2025, shell: 'msys2 {0}' }
           - { target: android-arm64-v8a, runner: ubuntu-24.04, shell: bash }
           - { target: android-armeabi-v7a, runner: ubuntu-24.04, shell: bash }
     runs-on: ${{ matrix.runner }}
@@ -41,6 +42,10 @@ jobs:
       run:
         shell: ${{ matrix.shell }}
     steps:
+      - name: Preserve LF source bytes on Windows
+        if: matrix.target == 'windows-x86_64'
+        shell: pwsh
+        run: git config --global core.autocrlf input
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
@@ -49,6 +54,17 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: gradle
+      - name: Install Windows compiler
+        if: matrix.target == 'windows-x86_64'
+        uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            base-devel
+            git
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-python
       - name: Install Android NDK
         if: startsWith(matrix.target, 'android-')
         run: /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager 'ndk;29.0.14206865'
@@ -56,32 +72,40 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          github_cli=gh
+          runner_temp="$RUNNER_TEMP"
+          if [[ '${{ matrix.target }}' == windows-* ]]; then
+            github_cli="/c/Program Files/GitHub CLI/gh.exe"
+            runner_temp="$(cygpath -u "$RUNNER_TEMP")"
+          fi
           sdk="kmedia-ffmpeg-runtime-$RUNTIME_VERSION-${{ matrix.target }}-sdk.tar.gz"
           maven="kmedia-ffmpeg-runtime-$RUNTIME_VERSION-maven-repository.tar.gz"
-          mkdir "$RUNNER_TEMP/runtime" "$RUNNER_TEMP/runtime-maven"
-          gh release download "v$RUNTIME_VERSION" -R Shusek/KMediaFfmpegRuntime \
-            --dir "$RUNNER_TEMP/runtime" --pattern "$sdk" --pattern "$maven" --pattern SHA256SUMS
+          mkdir "$runner_temp/runtime" "$runner_temp/runtime-maven"
+          "$github_cli" release download "v$RUNTIME_VERSION" -R Shusek/KMediaFfmpegRuntime \
+            --dir "$runner_temp/runtime" --pattern "$sdk" --pattern "$maven" --pattern SHA256SUMS
           for name in "$sdk" "$maven"; do
-            expected="$(awk -v p="$name" '$2 == p || $2 == "./" p {print $1}' "$RUNNER_TEMP/runtime/SHA256SUMS")"
+            expected="$(awk -v p="$name" '$2 == p || $2 == "./" p {print $1}' "$runner_temp/runtime/SHA256SUMS")"
             [[ "$expected" =~ ^[0-9a-f]{64}$ ]]
-            actual="$(python3 -c 'import hashlib,sys; h=hashlib.sha256(); f=open(sys.argv[1],"rb"); [h.update(b) for b in iter(lambda:f.read(1048576),b"")]; print(h.hexdigest())' "$RUNNER_TEMP/runtime/$name")"
+            actual="$(python3 -c 'import hashlib,sys; h=hashlib.sha256(); f=open(sys.argv[1],"rb"); [h.update(b) for b in iter(lambda:f.read(1048576),b"")]; print(h.hexdigest())' "$runner_temp/runtime/$name")"
             test "$actual" = "$expected"
           done
-          tar -xzf "$RUNNER_TEMP/runtime/$sdk" -C "$RUNNER_TEMP/runtime"
-          tar -xzf "$RUNNER_TEMP/runtime/$maven" -C "$RUNNER_TEMP/runtime-maven"
+          tar -xzf "$runner_temp/runtime/$sdk" -C "$runner_temp/runtime"
+          tar -xzf "$runner_temp/runtime/$maven" -C "$runner_temp/runtime-maven"
       - name: Build and inspect the bridge client only
         run: |
+          runner_temp="$RUNNER_TEMP"
+          if [[ '${{ matrix.target }}' == windows-* ]]; then runner_temp="$(cygpath -u "$RUNNER_TEMP")"; fi
           source_name="kmedia-ffmpeg-runtime-$RUNTIME_VERSION-corresponding-source.tar.gz"
-          source_sha="$(awk -v p="$source_name" '$2 == p || $2 == "./" p {print $1}' "$RUNNER_TEMP/runtime/SHA256SUMS")"
+          source_sha="$(awk -v p="$source_name" '$2 == p || $2 == "./" p {print $1}' "$runner_temp/runtime/SHA256SUMS")"
           [[ "$source_sha" =~ ^[0-9a-f]{64}$ ]]
           args=()
           if [[ "${{ matrix.target }}" == android-* ]]; then args+=(--ndk /usr/local/lib/android/sdk/ndk/29.0.14206865); fi
           python3 -B native/build-client.py \
             --target '${{ matrix.target }}' \
-            --runtime-sdk "$RUNNER_TEMP/runtime/sdk/${{ matrix.target }}" \
+            --runtime-sdk "$runner_temp/runtime/sdk/${{ matrix.target }}" \
             --runtime-version "$RUNTIME_VERSION" --runtime-source-sha256 "$source_sha" \
             --version 0.5.0-ci --revision "$GITHUB_SHA" \
-            --output "$RUNNER_TEMP/client" "${args[@]}"
+            --output "$runner_temp/client" "${args[@]}"
       - name: Load the one shared runtime and bridge in one process
         if: matrix.target == 'macos-aarch64'
         run: |
@@ -89,4 +113,13 @@ jobs:
             -PkmediaFfmpegRuntimeRepository="$RUNNER_TEMP/runtime-maven/maven" \
             -PkmediaBridgeTestRuntimeSdk="$RUNNER_TEMP/runtime/sdk/macos-aarch64" \
             -PkmediaBridgeTestClientOutput="$RUNNER_TEMP/client" \
+            :ffmpeg:jvmTest --tests '*.SharedRuntimeNativeIntegrationTest'
+      - name: Load the one shared runtime and bridge in one Windows process
+        if: matrix.target == 'windows-x86_64'
+        shell: pwsh
+        run: |
+          .\gradlew.bat --no-daemon `
+            "-PkmediaFfmpegRuntimeRepository=$env:RUNNER_TEMP\runtime-maven\maven" `
+            "-PkmediaBridgeTestRuntimeSdk=$env:RUNNER_TEMP\runtime\sdk\windows-x86_64" `
+            "-PkmediaBridgeTestClientOutput=$env:RUNNER_TEMP\client" `
             :ffmpeg:jvmTest --tests '*.SharedRuntimeNativeIntegrationTest'

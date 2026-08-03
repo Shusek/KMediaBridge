@@ -6,7 +6,7 @@ Download the SDK for the exact KMediaFfmpegRuntime release and verify its publis
 python3 -B native/build-client.py \
   --target macos-aarch64 \
   --runtime-sdk /path/to/kmedia-ffmpeg-runtime-sdk \
-  --runtime-version 0.1.0-rc.5 \
+  --runtime-version 0.1.0-rc.6 \
   --runtime-source-sha256 SHA256_FROM_THE_RUNTIME_RELEASE \
   --version 0.5.0-rc.4 \
   --revision FULL_GIT_COMMIT \
@@ -17,4 +17,4 @@ Android additionally requires `--ndk /path/to/android-ndk`. Valid Android target
 
 The builder verifies `runtime.properties`, component versions, target ABI and runtime ID; links dynamically against the prefixed SDK libraries; produces one bridge library; emits a client SDK and manifest; and runs dependency/architecture inspection. It does not build the shared runtime.
 
-To replace the shared libraries themselves, use the corresponding-source bundle and instructions published by KMediaFfmpegRuntime. The replacement must preserve its ABI and runtime ID contract or both clients reject it before loading. The AVFoundation-compatible macOS client additionally requires the shared runtime's compatible `avfilter`, `swscale`, and `swresample` libraries plus its documented decoder and encoder set.
+To replace the shared libraries themselves, use the corresponding-source bundle and instructions published by KMediaFfmpegRuntime. The replacement must preserve its ABI and runtime ID contract or both clients reject it before loading. Full desktop compatibility clients on macOS and Windows additionally require the shared runtime's compatible `avfilter`, `swscale`, and `swresample` libraries plus the target's documented decoder and encoder set.

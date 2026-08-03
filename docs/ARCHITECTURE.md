@@ -5,7 +5,7 @@
 ```text
 kmedia-bridge-ffmpeg
 ├── kmedia-bridge-client-android  ─┐
-├── kmedia-bridge-client-desktop  ─┼─ exact KMediaFfmpegRuntime 0.1.0-rc.5
+├── kmedia-bridge-client-desktop  ─┼─ exact KMediaFfmpegRuntime 0.1.0-rc.6
 └── kmedia-bridge-api             ─┘
 ```
 
@@ -22,7 +22,10 @@ Linux clients use `$ORIGIN`, macOS uses `@rpath`, and Windows loads the shared r
   shared runtime. An explicitly selected text subtitle may be composed by
   libass during that conversion.
 - **Windows JVM:** the thin x64 client keeps Media Foundation as the primary
-  decoder and D3D renderer.
+  decoder and D3D renderer. When the shared runtime advertises the full desktop
+  feature set, the bridge can tone-map explicit PQ/HLG to SDR or convert legacy
+  SDR media and selected text subtitles to Media Foundation-compatible AVC/AAC
+  fragmented MP4.
 - **Android:** Media3 remains primary; optional `.so` only for gaps.
 - **iOS:** dynamic framework/XCFramework with Kotlin/Native interop.
 - **Linux JVM:** thin x64/ARM64 clients keep system GStreamer as the confirmed
@@ -34,11 +37,11 @@ Linux clients use `$ORIGIN`, macOS uses `@rpath`, and Windows loads the shared r
 ABI version 4 exposes runtime identity, an authenticated feature declaration, a
 typed probe JSON document (including audio and subtitle selection metadata), a
 file remux operation, a track-selecting callback-based fragmented-MP4 stream,
-an optional SDR subtitle composition operation, and an AVFoundation
-compatibility stream. The callback supports backpressure and cancellation.
-Remux-only clients never decode the picture. The macOS client can use the
-shared runtime to decode legacy AVI/ASF video and WMA1/2/Pro/Lossless/Voice
-audio, compose text subtitles in libass, normalize to limited BT.709, encode
-AVC with VideoToolbox and AAC, and deliver CMAF/fMP4 to AVFoundation. PQ, HLG,
-BT.2020, Dolby Vision, and HDR10+ inputs are rejected by that SDR compatibility
-operation.
+an optional SDR subtitle composition operation, and an AVC/AAC compatibility
+stream. The callback supports backpressure and cancellation. Remux-only clients
+never decode the picture. Full desktop clients can use the shared runtime to
+decode legacy AVI/ASF video and WMA1/2/Pro/Lossless/Voice audio, compose text
+subtitles in libass, normalize to limited BT.709, encode AVC with VideoToolbox
+on macOS or Media Foundation on Windows plus AAC, and deliver CMAF/fMP4 to the
+platform player. PQ, HLG, BT.2020, Dolby Vision, and HDR10+ inputs are rejected
+by that SDR compatibility operation and must use the explicit color pipeline.
