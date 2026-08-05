@@ -76,6 +76,7 @@ kotlin {
             api("io.github.shusek:kmedia-ffmpeg-runtime-desktop:$ffmpegRuntimeVersion") {
                 version { strictly(ffmpegRuntimeVersion) }
             }
+            compileOnly(libs.graalvm.nativeimage)
             implementation(libs.jna)
         }
         commonTest.dependencies {
