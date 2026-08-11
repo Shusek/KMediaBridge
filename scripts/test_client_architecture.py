@@ -72,9 +72,28 @@ class ClientArchitectureTest(unittest.TestCase):
         source = (ROOT / ".github/workflows/release.yml").read_text()
         self.assertIn("./gradlew --no-daemon --no-configuration-cache", source)
 
+    def test_rc_release_requires_both_verified_android_clients(self) -> None:
+        workflow = (ROOT / ".github/workflows/release.yml").read_text()
+        builder = (ROOT / "native/build-client.py").read_text()
+        verifier = (ROOT / "scripts/verify_client_output.py").read_text()
+
+        self.assertNotIn("android_armv7_native_graph_verified", workflow)
+        self.assertIn("android-arm64-v8a", workflow)
+        self.assertIn("android-armeabi-v7a", workflow)
+        self.assertIn("needs: [readiness, client]", workflow)
+        self.assertIn('--arm64 "$RUNNER_TEMP/clients/client-android-arm64-v8a"', workflow)
+        self.assertIn('--armv7 "$RUNNER_TEMP/clients/client-android-armeabi-v7a"', workflow)
+        self.assertIn('if [[ "$VERSION" != *-rc.* ]]; then', workflow)
+        self.assertIn('test "$ARM_MATRIX" = true', workflow)
+        self.assertIn("verify_client_output.py", builder)
+        self.assertIn(
+            "KMediaBridge client is not linked only to the shared runtime ABI",
+            verifier,
+        )
+
     def test_transitive_runtime_pom_verifier_supports_maven_namespaces(self) -> None:
         version = "0.5.0-rc.1"
-        runtime_version = "0.1.0-rc.6"
+        runtime_version = "0.1.0-rc.7"
         with tempfile.TemporaryDirectory() as temporary:
             staging = Path(temporary)
             for artifact, runtime_artifact in (
@@ -119,7 +138,7 @@ class ClientArchitectureTest(unittest.TestCase):
                 (source / "runtime/libkmediabridge.so").write_bytes(b"client")
                 (source / "manifest.properties").write_text("\n".join((
                     f"platform={target}",
-                    "sharedRuntimeId=kmediaffmpeg-8.1.2-ass-0.17.5-d19180298319acbc",
+                    "sharedRuntimeId=kmediaffmpeg-8.1.2-ass-0.17.5-dd04e114cf7705fe",
                     "buildRecipeRevision=0123456789abcdef0123456789abcdef01234567",
                     "sourceOfferUrl=https://example.invalid/source.tar.gz",
                     "sourceSha256=" + "a" * 64,
