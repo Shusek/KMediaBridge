@@ -12,7 +12,7 @@ on:
       runtime_version:
         description: Exact released KMediaFfmpegRuntime version
         required: true
-        default: 0.1.0-rc.6
+        default: 0.1.0-rc.7
         type: string
       tested_commit:
         description: Forty-character commit tested locally
@@ -23,12 +23,7 @@ on:
         required: true
         type: string
       android_arm_matrix_verified:
-        description: Confirm API 28/35 ARM64 and API 28 ARMv7 device tests passed locally
-        required: true
-        default: false
-        type: boolean
-      android_armv7_native_graph_verified:
-        description: RC only - confirm the pure-ARMv7 shared native graph passed
+        description: Confirm the complete stable Android ARM device matrix passed
         required: true
         default: false
         type: boolean
@@ -56,7 +51,6 @@ jobs:
       TESTED_COMMIT: ${{ inputs.tested_commit }}
       TESTED_RUNTIME_ID: ${{ inputs.tested_runtime_id }}
       ARM_MATRIX: ${{ inputs.android_arm_matrix_verified }}
-      ARMV7_NATIVE_GRAPH: ${{ inputs.android_armv7_native_graph_verified }}
       REPORT_SHA256: ${{ inputs.runtime_report_sha256 }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -67,13 +61,11 @@ jobs:
         run: |
           test "$GITHUB_REF" = refs/heads/main
           [[ "$VERSION" =~ ^0\.5\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]
-          if [[ "$VERSION" == *-rc.* ]]; then
-            test "$ARM_MATRIX" = true || test "$ARMV7_NATIVE_GRAPH" = true
-          else
+          if [[ "$VERSION" != *-rc.* ]]; then
             test "$ARM_MATRIX" = true
           fi
           if [[ "$VERSION" == *-rc.* ]]; then
-            test "$RUNTIME_VERSION" = 0.1.0-rc.6
+            test "$RUNTIME_VERSION" = 0.1.0-rc.7
           else
             test "$RUNTIME_VERSION" = 0.1.0
           fi
