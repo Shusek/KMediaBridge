@@ -94,7 +94,10 @@ jobs:
             --form "bundle=@$bundle;type=application/octet-stream" --output "$response" \
             --url "https://central.sonatype.com/api/v1/publisher/upload?name=KMediaBridge%20$VERSION&publishingType=$PUBLISHING_TYPE"
           deployment="$(tr -d '\r\n' < "$response")"; [[ "$deployment" =~ ^[0-9a-fA-F-]{36}$ ]]
-          for attempt in {1..90}; do
+          # Central can remain in PUBLISHING for longer than 15 minutes. Keep
+          # polling the deployment that was already accepted instead of
+          # encouraging a duplicate upload after an otherwise healthy run.
+          for attempt in {1..240}; do
             state="$(curl --config "$config" --fail-with-body --silent --show-error --request POST \
               --url "https://central.sonatype.com/api/v1/publisher/status?id=$deployment" | jq -r '.deploymentState')"
             case "$state" in PUBLISHED) exit 0;; VALIDATED) [[ "$PUBLISHING_TYPE" = USER_MANAGED ]] && exit 0;; FAILED) exit 1;; PENDING|VALIDATING|PUBLISHING);; *) exit 1;; esac
