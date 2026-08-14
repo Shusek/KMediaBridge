@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  RUNTIME_VERSION: 0.1.0-rc.8
+  RUNTIME_VERSION: 0.1.0-rc.9
 
 jobs:
   source:
