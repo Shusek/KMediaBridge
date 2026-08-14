@@ -1,6 +1,6 @@
 # Compliance boundary
 
-KMediaBridge publishes only its independent Kotlin code and thin native client. FFmpeg 8.1.2, libass, FreeType, FriBidi and HarfBuzz are conveyed once by KMediaFfmpegRuntime under their own notices.
+KMediaBridge publishes only its independent Kotlin code and thin native client. FFmpeg 9.0.1, libass, FreeType, FriBidi and HarfBuzz are conveyed once by KMediaFfmpegRuntime under their own notices.
 
 The shared runtime release is responsible for the FFmpeg signature check, disabled GPL/version3/nonfree configuration, dynamic-only libraries, corresponding source, build arguments, patches, SBOM, signatures and checksums. KMediaBridge verifies the exact runtime version and ID both while building the client and before loading it.
 

@@ -119,7 +119,7 @@ def main() -> int:
     parser.add_argument("--source-sha256", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--target", choices=("auto", "windows"), default="auto")
-    parser.add_argument("--expected-version", default="8.1.2")
+    parser.add_argument("--expected-version", default="9.0.1")
     arguments = parser.parse_args()
 
     library_path = arguments.library if arguments.library.is_file() else arguments.fallback_library

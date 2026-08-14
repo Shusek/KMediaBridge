@@ -73,8 +73,8 @@ class DesktopFfmpegRuntimeInspectorTest {
         schemaVersion=1
         platform=$platform
         abiVersion=4
-        sharedRuntimeId=kmediaffmpeg-8.1.2-ass-0.17.5-dd04e114cf7705fe
-        ffmpegVersion=8.1.2
+        sharedRuntimeId=kmediaffmpeg-9.0.1-ass-0.17.5-cbb827ab5d596906
+        ffmpegVersion=9.0.1
         ffmpegLicenseSpdx=LGPL-2.1-or-later
         ffmpegReportedLicense=LGPL version 2.1 or later
         sourceOfferUrl=https://example.invalid/ffmpeg.tar.xz

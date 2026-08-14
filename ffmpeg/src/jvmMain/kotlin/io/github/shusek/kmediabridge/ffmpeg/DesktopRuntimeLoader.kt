@@ -364,9 +364,10 @@ internal object DesktopRuntimeLoader {
         val source = runtimeSource(platform, replacementDirectory, classLoader, extractionParentDirectory)
         val manifest = source.readManifest()
         validateManifestPlatformAndAbi(platform, manifest)
+        val selectedSharedRuntimeSource = selectSharedRuntimeSource(replacementDirectory)
         val sharedRuntime =
             KMediaFfmpegRuntime.current().orElseGet {
-                KMediaFfmpegRuntime.initialize(SharedRuntimeSource.bundled())
+                KMediaFfmpegRuntime.initialize(selectedSharedRuntimeSource)
             }
         if (sharedRuntime.runtimeId() != manifest.sharedRuntimeId) {
             reject("The KMediaBridge client targets a different KMediaFfmpegRuntime ID.")
@@ -517,6 +518,29 @@ internal object DesktopRuntimeLoader {
             FfmpegRuntimePolicy.PREFER_BUNDLED -> if (bundledAvailable) null else externalDirectory
             FfmpegRuntimePolicy.PREFER_EXTERNAL -> if (externalAvailable) externalDirectory else null
         }
+    }
+
+    internal fun selectSharedRuntimeSource(replacementDirectory: Path?): SharedRuntimeSource {
+        if (replacementDirectory == null) return SharedRuntimeSource.bundled()
+
+        val root = replacementDirectory.toAbsolutePath().normalize()
+        val ffmpegManifest = root.resolve("runtime.properties")
+        val assManifest = root.resolve("ass-runtime.properties")
+        val libraryDirectory = root.resolve("lib")
+        val hasAnySharedRuntimeEntry =
+            Files.exists(ffmpegManifest) ||
+                Files.exists(assManifest) ||
+                Files.exists(libraryDirectory)
+        if (!hasAnySharedRuntimeEntry) return SharedRuntimeSource.bundled()
+
+        if (
+            !Files.isRegularFile(ffmpegManifest) ||
+            !Files.isRegularFile(assManifest) ||
+            !Files.isDirectory(libraryDirectory)
+        ) {
+            reject("The external KMediaBridge directory contains an incomplete shared runtime.")
+        }
+        return SharedRuntimeSource.externalDirectory(root.toFile())
     }
 
     private fun verifyLibraries(
@@ -818,7 +842,7 @@ private data class NativePayloadManifest(
                         ?: DesktopRuntimeLoader.run { reject("The native manifest ABI is invalid.") },
                 sharedRuntimeId =
                     required("sharedRuntimeId").also { value ->
-                        if (!value.matches(Regex("kmediaffmpeg-8\\.1\\.2-ass-0\\.17\\.5-[0-9a-f]{16}"))) {
+                        if (!value.matches(Regex("kmediaffmpeg-9\\.0\\.1-ass-0\\.17\\.5-[0-9a-f]{16}"))) {
                             DesktopRuntimeLoader.run { reject("The native manifest has an invalid shared runtime ID.") }
                         }
                     },
