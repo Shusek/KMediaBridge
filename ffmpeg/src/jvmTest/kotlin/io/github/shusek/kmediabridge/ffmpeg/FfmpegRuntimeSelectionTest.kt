@@ -2,7 +2,11 @@
 
 package io.github.shusek.kmediabridge.ffmpeg
 
+import io.github.shusek.kmediabridge.MediaBridgeException
+import io.github.shusek.kmediaffmpeg.runtime.RuntimeSource
+import java.nio.file.Files
 import java.nio.file.Path
+import java.util.Comparator
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -53,5 +57,32 @@ class FfmpegRuntimeSelectionTest {
                 classLoaderWithoutBundledRuntime,
             ),
         )
+    }
+
+    @Test
+    fun combinedReplacementSelectsExternalSharedRuntimeOnlyWhenComplete() {
+        val directory = Files.createTempDirectory("kmediabridge-runtime-selection-")
+        try {
+            assertEquals(
+                RuntimeSource.bundled(),
+                DesktopRuntimeLoader.selectSharedRuntimeSource(directory),
+            )
+
+            Files.createFile(directory.resolve("runtime.properties"))
+            assertFailsWith<MediaBridgeException> {
+                DesktopRuntimeLoader.selectSharedRuntimeSource(directory)
+            }
+
+            Files.createFile(directory.resolve("ass-runtime.properties"))
+            Files.createDirectory(directory.resolve("lib"))
+            assertEquals(
+                RuntimeSource.externalDirectory(directory.toFile()),
+                DesktopRuntimeLoader.selectSharedRuntimeSource(directory),
+            )
+        } finally {
+            Files.walk(directory).use { paths ->
+                paths.sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists)
+            }
+        }
     }
 }

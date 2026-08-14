@@ -39,7 +39,7 @@ class SharedRuntimeNativeIntegrationTest {
             val driver = BundledFfmpegNativeDriver.load(classLoader = loader)
             assertEquals(report.runtimeId(), driver.runtimeInfo.sharedRuntimeId)
             assertEquals(report.configurationSha256(), driver.runtimeInfo.sharedRuntimeConfigurationSha256)
-            assertEquals("8.1.2", driver.runtimeInfo.ffmpegVersion)
+            assertEquals("9.0.1", driver.runtimeInfo.ffmpegVersion)
             assertTrue(driver.runtimeInfo.configureArguments.contains("--disable-gpl"))
         }
         resources.toFile().deleteRecursively()

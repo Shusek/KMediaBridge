@@ -10,7 +10,11 @@ import java.nio.file.Path
  *
  * An external directory is not an FFmpeg executable or an arbitrary directory
  * of distribution libraries. It must contain a compatible KMediaBridge native
- * bridge, its FFmpeg libraries, and a verifiable `manifest.properties`.
+ * bridge and a verifiable `manifest.properties`. A full shared-runtime
+ * replacement additionally contains `runtime.properties`,
+ * `ass-runtime.properties`, and `lib/` in the same directory. When those three
+ * entries are absent, only the bridge is replaced and the verified bundled
+ * KMediaFfmpegRuntime remains in use.
  *
  * KMediaBridge does not convey an external payload, so it may report an
  * effective license other than LGPL, including GPL. Its licensing and any

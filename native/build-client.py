@@ -25,7 +25,7 @@ ANDROID = {
     "android-arm64-v8a": ("arm64-v8a", "aarch64-linux-android", "AArch64"),
     "android-armeabi-v7a": ("armeabi-v7a", "armv7a-linux-androideabi", "ARM"),
 }
-RUNTIME_ID = re.compile(r"kmediaffmpeg-8\.1\.2-ass-0\.17\.5-[0-9a-f]{16}")
+RUNTIME_ID = re.compile(r"kmediaffmpeg-9\.0\.1-ass-0\.17\.5-[0-9a-f]{16}")
 FULL_DESKTOP_TARGETS = {"macos-aarch64", "windows-x86_64"}
 
 
@@ -73,7 +73,7 @@ def runtime_contract(sdk: Path, target: str, expected_version: str) -> dict[str,
     manifest = properties(sdk / "runtime.properties")
     if not RUNTIME_ID.fullmatch(manifest.get("runtimeId", "")):
         raise ValueError("runtime SDK has an invalid runtime ID")
-    if manifest.get("version.ffmpeg") != "8.1.2" or manifest.get("version.libass") != "0.17.5":
+    if manifest.get("version.ffmpeg") != "9.0.1" or manifest.get("version.libass") != "0.17.5":
         raise ValueError("runtime SDK component versions differ from the client contract")
     if manifest.get("distributionVersion") != expected_version:
         raise ValueError("runtime SDK distribution version differs from the client contract")

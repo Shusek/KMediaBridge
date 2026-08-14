@@ -120,11 +120,11 @@ class FfmpegComplianceVerifierTest {
 
     private fun compliantRuntime(): FfmpegRuntimeInfo =
         FfmpegRuntimeInfo(
-            ffmpegVersion = "8.1.2",
+            ffmpegVersion = "9.0.1",
             ffmpegLicenseSpdx = "LGPL-2.1-or-later",
             ffmpegReportedLicense = "LGPL version 2.1 or later",
             configureArguments = COMPLIANT_ARGUMENTS,
-            ffmpegSourceArchiveUrl = "https://github.com/Shusek/KMediaBridge/releases/download/v0.2.0/ffmpeg-8.1.2.tar.xz",
+            ffmpegSourceArchiveUrl = "https://ffmpeg.org/releases/ffmpeg-9.0.1.tar.xz",
             ffmpegSourceArchiveSha256 = SHA256,
             nativeArtifactSha256 = SHA256,
             buildRecipeUrl = "https://github.com/Shusek/KMediaBridge/tree/0123456789abcdef/native",

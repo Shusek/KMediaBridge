@@ -45,7 +45,7 @@ class BundledFfmpegNativeDriverTest {
                 val encoded = loader.getResourceAsStream("kmediabridge-test.mkv.b64")!!.bufferedReader().readText()
                 Files.write(input, Base64.getMimeDecoder().decode(encoded))
                 val driver = BundledFfmpegNativeDriver.load(classLoader = loader)
-                assertEquals("8.1.2", driver.runtimeInfo.ffmpegVersion)
+                assertEquals("9.0.1", driver.runtimeInfo.ffmpegVersion)
                 assertEquals(FfmpegRuntimeOrigin.BUNDLED, driver.runtimeInfo.origin)
                 assertEquals(
                     FfmpegRuntimeComplianceScope.KMEDIABRIDGE_DISTRIBUTED,
@@ -216,7 +216,7 @@ class BundledFfmpegNativeDriverTest {
 
                 assertEquals(FfmpegRuntimeOrigin.EXTERNAL_DIRECTORY, driver.runtimeInfo.origin)
                 assertEquals(FfmpegRuntimeComplianceScope.CALLER_PROVIDED, driver.runtimeInfo.complianceScope)
-                assertEquals("8.1.2", driver.runtimeInfo.ffmpegVersion)
+                assertEquals("9.0.1", driver.runtimeInfo.ffmpegVersion)
                 assertEquals("", driver.runtimeInfo.ffmpegSourceArchiveUrl)
                 assertEquals(false, driver.runtimeInfo.exactCorrespondingSourceAvailable)
             } finally {
