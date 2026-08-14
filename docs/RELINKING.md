@@ -6,9 +6,9 @@ Download the SDK for the exact KMediaFfmpegRuntime release and verify its publis
 python3 -B native/build-client.py \
   --target macos-aarch64 \
   --runtime-sdk /path/to/kmedia-ffmpeg-runtime-sdk \
-  --runtime-version 0.1.0-rc.8 \
+  --runtime-version 0.1.0-rc.9 \
   --runtime-source-sha256 SHA256_FROM_THE_RUNTIME_RELEASE \
-  --version 0.5.0-rc.9 \
+  --version 0.5.0-rc.10 \
   --revision FULL_GIT_COMMIT \
   --output build/client
 ```
