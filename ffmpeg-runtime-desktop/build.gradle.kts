@@ -41,7 +41,7 @@ plugins {
 }
 
 val ffmpegRuntimeVersion =
-    providers.gradleProperty("kmediaFfmpegRuntimeVersion").orElse("0.1.0-rc.9").get()
+    providers.gradleProperty("kmediaFfmpegRuntimeVersion").orElse("0.1.0-rc.10").get()
 val ffmpegDesktopRuntimeVersion =
     providers.gradleProperty("kmediaFfmpegDesktopRuntimeVersion").orElse(ffmpegRuntimeVersion).get()
 val nativePayload =
