@@ -40,7 +40,10 @@ plugins {
     alias(libs.plugins.vanniktech.maven.publish)
 }
 
-val ffmpegRuntimeVersion = "0.1.0-rc.9"
+val ffmpegRuntimeVersion =
+    providers.gradleProperty("kmediaFfmpegRuntimeVersion").orElse("0.1.0-rc.9").get()
+val ffmpegDesktopRuntimeVersion =
+    providers.gradleProperty("kmediaFfmpegDesktopRuntimeVersion").orElse(ffmpegRuntimeVersion).get()
 val nativePayload =
     providers
         .gradleProperty("kmediaBridgeDesktopNativePayloadDirectory")
@@ -53,8 +56,8 @@ java {
 }
 
 dependencies {
-    api("io.github.shusek:kmedia-ffmpeg-runtime-desktop:$ffmpegRuntimeVersion") {
-        version { strictly(ffmpegRuntimeVersion) }
+    api("io.github.shusek:kmedia-ffmpeg-runtime-desktop:$ffmpegDesktopRuntimeVersion") {
+        version { strictly(ffmpegDesktopRuntimeVersion) }
     }
 }
 

@@ -7,6 +7,7 @@
 
 #if defined(KMB_ENABLE_HDR_TO_SDR)
 
+#include "kmedia_bridge_avc_encoder.h"
 #include "kmedia_bridge_hdr_math.h"
 #include "kmedia_bridge_timestamps.h"
 
@@ -336,38 +337,6 @@ static KmbResult kmb_tonemap_open_decoder(KmbToneMapPipeline *pipeline, char **o
     return KMB_OK;
 }
 
-static int kmb_tonemap_encoder_candidates(const AVCodec **candidates, int capacity) {
-    static const char *const names[] = {
-#if defined(__ANDROID__)
-        "h264_mediacodec",
-#endif
-#if defined(__APPLE__)
-        "h264_videotoolbox",
-#endif
-#if defined(_WIN32)
-        "h264_mf",
-        "h264_nvenc",
-#endif
-        "libopenh264",
-        NULL,
-    };
-    int index = 0;
-    int count = 0;
-    for (index = 0; names[index] != NULL; ++index) {
-        const AVCodec *codec = avcodec_find_encoder_by_name(names[index]);
-        if (codec != NULL && count < capacity) candidates[count++] = codec;
-    }
-    if (count < capacity) {
-        const AVCodec *fallback = avcodec_find_encoder(AV_CODEC_ID_H264);
-        int duplicate = 0;
-        for (index = 0; index < count; ++index) {
-            if (candidates[index] == fallback) duplicate = 1;
-        }
-        if (fallback != NULL && !duplicate) candidates[count++] = fallback;
-    }
-    return count;
-}
-
 static const char *kmb_tonemap_android_compatibility_encoder(void) {
 #if defined(__ANDROID__)
     char manufacturer[PROP_VALUE_MAX] = {0};
@@ -380,28 +349,19 @@ static const char *kmb_tonemap_android_compatibility_encoder(void) {
 }
 
 static KmbResult kmb_tonemap_open_encoder(KmbToneMapPipeline *pipeline, char **output_error) {
-    const AVCodec *candidates[8] = {0};
-    static const enum AVPixelFormat pixel_formats[] = {
-#if defined(__ANDROID__)
-        AV_PIX_FMT_NV12,
-        AV_PIX_FMT_YUV420P,
-#else
-        AV_PIX_FMT_YUV420P,
-        AV_PIX_FMT_NV12,
-#endif
-    };
+    KmbAvcEncoderAttempt attempts[8] = {0};
     AVStream *input_stream = pipeline->input->streams[pipeline->selected_video_track_id];
     AVRational frame_rate = av_guess_frame_rate(pipeline->input, input_stream, NULL);
     double frames_per_second = 30.0;
     int64_t bitrate = 0;
-    int candidate_count = kmb_tonemap_encoder_candidates(candidates, 8);
-    int candidate_index = 0;
+    int attempt_count = kmb_avc_encoder_attempts(attempts, 8);
+    int attempt_index = 0;
     int encoder_name_attempt = 0;
-    int format_index = 0;
+    int found_encoder = 0;
     int last_result = AVERROR_ENCODER_NOT_FOUND;
     const char *compatibility_encoder = kmb_tonemap_android_compatibility_encoder();
     const int encoder_name_attempt_count = compatibility_encoder != NULL ? 2 : 1;
-    if (candidate_count == 0) {
+    if (attempt_count == 0) {
         kmb_tonemap_set_error(output_error, "No AVC encoder is available in the selected runtime.");
         return KMB_UNSUPPORTED;
     }
@@ -415,7 +375,11 @@ static KmbResult kmb_tonemap_open_encoder(KmbToneMapPipeline *pipeline, char **o
         frames_per_second / 8.0);
     if (bitrate < 2000000) bitrate = 2000000;
     if (bitrate > 24000000) bitrate = 24000000;
-    for (candidate_index = 0; candidate_index < candidate_count; ++candidate_index) {
+    for (attempt_index = 0; attempt_index < attempt_count; ++attempt_index) {
+        const KmbAvcEncoderAttempt *attempt = &attempts[attempt_index];
+        const AVCodec *codec = kmb_avc_encoder_find(attempt);
+        if (codec == NULL) continue;
+        found_encoder = 1;
         for (encoder_name_attempt = 0;
              encoder_name_attempt < encoder_name_attempt_count;
              ++encoder_name_attempt) {
@@ -423,61 +387,62 @@ static KmbResult kmb_tonemap_open_encoder(KmbToneMapPipeline *pipeline, char **o
                 compatibility_encoder != NULL && encoder_name_attempt == 0
                     ? compatibility_encoder
                     : NULL;
-            for (format_index = 0; format_index < 2; ++format_index) {
-                AVCodecContext *context = avcodec_alloc_context3(candidates[candidate_index]);
-                AVDictionary *options = NULL;
-                if (context == NULL) {
-                    kmb_tonemap_set_error(output_error, "Could not allocate the AVC encoder.");
-                    return KMB_ALLOCATION_FAILED;
-                }
-                context->width = input_stream->codecpar->width;
-                context->height = input_stream->codecpar->height;
-                context->sample_aspect_ratio = input_stream->codecpar->sample_aspect_ratio;
-                if (context->sample_aspect_ratio.num <= 0 || context->sample_aspect_ratio.den <= 0) {
-                    context->sample_aspect_ratio = (AVRational){1, 1};
-                }
-                context->pix_fmt = pixel_formats[format_index];
-                context->time_base = input_stream->time_base;
-                if (context->time_base.num <= 0 || context->time_base.den <= 0) {
-                    context->time_base = (AVRational){1, 90000};
-                }
-                context->framerate = frame_rate;
-                context->bit_rate = bitrate;
-                context->gop_size = (int)(frames_per_second * 2.0 + 0.5);
-                if (context->gop_size < 12) context->gop_size = 12;
-                context->max_b_frames = 0;
-                context->color_range = AVCOL_RANGE_MPEG;
-                context->color_primaries = AVCOL_PRI_BT709;
-                context->color_trc = AVCOL_TRC_BT709;
-                context->colorspace = AVCOL_SPC_BT709;
-                /*
-                 * Android MediaCodec encoders, including the official ARM emulator and NVIDIA
-                 * Shield, do not reliably resume after FFmpeg generates global AVC headers with
-                 * a dummy frame followed by MediaCodec.flush(). The fragmented MP4 muxer uses
-                 * delay_moov and derives avcC from the first real packet, so Android deliberately
-                 * avoids that dummy cycle for every selected hardware encoder.
-                 */
-#if !defined(__ANDROID__)
-                context->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-#endif
-                av_dict_set(&options, "allow_sw", "1", 0);
-                av_dict_set(&options, "realtime", "1", 0);
-                if (encoder_name != NULL) {
-                    av_dict_set(&options, "codec_name", encoder_name, 0);
-                }
-                last_result = avcodec_open2(context, candidates[candidate_index], &options);
-                av_dict_free(&options);
-                if (last_result >= 0) {
-                    pipeline->encoder = context;
-                    if (encoder_name != NULL) {
-                        KMB_TONEMAP_TRACE("tone-map selected the Android compatibility encoder");
-                    }
-                    KMB_TONEMAP_TRACE("tone-map encoder ready");
-                    return KMB_OK;
-                }
-                avcodec_free_context(&context);
+            AVCodecContext *context = avcodec_alloc_context3(codec);
+            AVDictionary *options = NULL;
+            if (context == NULL) {
+                kmb_tonemap_set_error(output_error, "Could not allocate the AVC encoder.");
+                return KMB_ALLOCATION_FAILED;
             }
+            context->width = input_stream->codecpar->width;
+            context->height = input_stream->codecpar->height;
+            context->sample_aspect_ratio = input_stream->codecpar->sample_aspect_ratio;
+            if (context->sample_aspect_ratio.num <= 0 || context->sample_aspect_ratio.den <= 0) {
+                context->sample_aspect_ratio = (AVRational){1, 1};
+            }
+            context->pix_fmt = attempt->pixel_format;
+            context->time_base = input_stream->time_base;
+            if (context->time_base.num <= 0 || context->time_base.den <= 0) {
+                context->time_base = (AVRational){1, 90000};
+            }
+            context->framerate = frame_rate;
+            context->bit_rate = bitrate;
+            context->gop_size = (int)(frames_per_second * 2.0 + 0.5);
+            if (context->gop_size < 12) context->gop_size = 12;
+            context->max_b_frames = 0;
+            context->color_range = AVCOL_RANGE_MPEG;
+            context->color_primaries = AVCOL_PRI_BT709;
+            context->color_trc = AVCOL_TRC_BT709;
+            context->colorspace = AVCOL_SPC_BT709;
+            /*
+             * Android MediaCodec encoders, including the official ARM emulator and NVIDIA
+             * Shield, do not reliably resume after FFmpeg generates global AVC headers with
+             * a dummy frame followed by MediaCodec.flush(). The fragmented MP4 muxer uses
+             * delay_moov and derives avcC from the first real packet, so Android deliberately
+             * avoids that dummy cycle for every selected hardware encoder.
+             */
+#if !defined(__ANDROID__)
+            context->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+#endif
+            kmb_avc_encoder_apply_options(attempt, &options);
+            if (encoder_name != NULL) {
+                av_dict_set(&options, "codec_name", encoder_name, 0);
+            }
+            last_result = avcodec_open2(context, codec, &options);
+            av_dict_free(&options);
+            if (last_result >= 0) {
+                pipeline->encoder = context;
+                if (encoder_name != NULL) {
+                    KMB_TONEMAP_TRACE("tone-map selected the Android compatibility encoder");
+                }
+                KMB_TONEMAP_TRACE("tone-map encoder ready");
+                return KMB_OK;
+            }
+            avcodec_free_context(&context);
         }
+    }
+    if (!found_encoder) {
+        kmb_tonemap_set_error(output_error, "No AVC encoder is available in the selected runtime.");
+        return KMB_UNSUPPORTED;
     }
     kmb_tonemap_set_av_error(output_error, "Could not open an AVC encoder", last_result);
     return KMB_UNSUPPORTED;

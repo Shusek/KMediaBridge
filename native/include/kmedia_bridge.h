@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define KMB_ABI_VERSION 4
+#define KMB_ABI_VERSION 5
 
 typedef enum KmbResult {
     KMB_OK = 0,
@@ -32,6 +32,9 @@ typedef enum KmbResult {
 
 /* Return zero to continue or a non-zero value to cancel the remux operation. */
 typedef int32_t (*KmbWriteCallback)(void *opaque, const uint8_t *bytes, int32_t size);
+
+/* Return zero to continue or a non-zero value to cancel the conversion. */
+typedef int32_t (*KmbProgressCallback)(void *opaque, int64_t presentation_time_us);
 
 KMB_EXPORT uint32_t kmb_abi_version(void);
 KMB_EXPORT const char *kmb_ffmpeg_version(void);
@@ -108,9 +111,9 @@ KMB_EXPORT KmbResult kmb_tone_map_hdr_to_sdr_fragmented_mp4_stream(
 /*
  * Converts a local SDR source to platform-compatible AVC/AAC fragmented MP4.
  * A subtitle id of -2 omits subtitles; otherwise the selected text track is
- * composited through libass. This is an additive ABI 4 entry point and is
+ * composited through libass. This entry point was introduced with ABI 4 and is
  * callable only when the legacy avFoundationCompatibility feature key is
- * advertised by the runtime. ABI 4 retains that key for both macOS and Windows.
+ * advertised by the runtime. ABI 5 retains that key for both macOS and Windows.
  */
 KMB_EXPORT KmbResult kmb_transcode_avfoundation_fragmented_mp4_stream(
     const char *input_locator,
@@ -120,6 +123,27 @@ KMB_EXPORT KmbResult kmb_transcode_avfoundation_fragmented_mp4_stream(
     int32_t preferred_audio_track_id,
     int32_t preferred_subtitle_track_id,
     KmbWriteCallback write_callback,
+    void *opaque,
+    char **output_error
+);
+
+/*
+ * Converts a local SDR source to AVC/AAC HLS with MPEG-2 TS segments. The
+ * playlist and segment paths are caller-owned private temporary locations.
+ * The progress callback applies backpressure and provides cooperative
+ * cancellation without exposing input or output locators.
+ */
+KMB_EXPORT KmbResult kmb_transcode_cast_mpeg_ts_hls(
+    const char *input_locator,
+    const char *playlist_path,
+    const char *segment_path_pattern,
+    int64_t segment_duration_us,
+    int32_t maximum_playlist_segments,
+    int64_t start_time_us,
+    int32_t preferred_video_track_id,
+    int32_t preferred_audio_track_id,
+    int32_t preferred_subtitle_track_id,
+    KmbProgressCallback progress_callback,
     void *opaque,
     char **output_error
 );

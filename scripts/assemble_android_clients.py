@@ -33,7 +33,7 @@ def main() -> int:
     if output.exists():
         raise ValueError("output already exists")
     values = [
-        ("schemaVersion", "1"), ("available", "true"), ("abiVersion", "4"),
+        ("schemaVersion", "1"), ("available", "true"), ("abiVersion", "5"),
         ("sharedRuntimeId", next(iter(runtime_ids))), ("ffmpegVersion", "9.0.1"),
         ("ffmpegLicenseSpdx", "LGPL-2.1-or-later"),
         ("ffmpegSourceArchiveUrl", manifests[0][2]["sourceOfferUrl"]),

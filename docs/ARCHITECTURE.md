@@ -32,6 +32,19 @@ Linux clients use `$ORIGIN`, macOS uses `@rpath`, and Windows loads the shared r
   HDR display route and use this bridge only as an optional container fallback.
 - **Wasm:** the API is available, but no full FFmpeg.wasm payload is promised.
 
+## Encoder selection
+
+Every decoding conversion shares one ordered AVC encoder policy. Hardware
+attempts precede software-capable attempts: VideoToolbox on macOS, Media
+Foundation and then NVENC when present on Windows, and MediaCodec on Android.
+Media Foundation explicitly receives `hw_encoding=1`; its software-capable
+retry uses `hw_encoding=0`. VideoToolbox similarly starts with `allow_sw=0`
+before a later `allow_sw=1` retry. NVIDIA Android devices retain their explicit
+known-good software implementation override because their framework encoder
+can open successfully and then stall after a MediaCodec flush. Linux runtime
+manifests remain remux-only and therefore never advertise these conversion
+paths merely because an encoder name exists on the host.
+
 ## Current native ABI
 
 ABI version 4 exposes runtime identity, an authenticated feature declaration, a

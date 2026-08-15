@@ -637,7 +637,7 @@ private val LIBRARY_FILE_NAMES =
     listOf(
         "libkmediabridge.so",
     )
-private const val SUPPORTED_ABI = 4
+private const val SUPPORTED_ABI = 5
 private const val EXPECTED_FEATURES = "{\"subtitleBurnIn\":false,\"hdrToSdrToneMap\":true}"
 private const val BUNDLED_MANIFEST = "META-INF/kmediabridge/android-client.properties"
 private const val EXTERNAL_MANIFEST = "android-client.properties"

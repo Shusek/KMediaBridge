@@ -11,7 +11,10 @@ plugins {
     alias(libs.plugins.ktlint)
 }
 
-val ffmpegRuntimeVersion = "0.1.0-rc.9"
+val ffmpegRuntimeVersion =
+    providers.gradleProperty("kmediaFfmpegRuntimeVersion").orElse("0.1.0-rc.9").get()
+val ffmpegDesktopRuntimeVersion =
+    providers.gradleProperty("kmediaFfmpegDesktopRuntimeVersion").orElse(ffmpegRuntimeVersion).get()
 
 kotlin {
     explicitApi()
@@ -73,8 +76,8 @@ kotlin {
         }
         jvmMain.dependencies {
             api(project(":ffmpeg-runtime-desktop"))
-            api("io.github.shusek:kmedia-ffmpeg-runtime-desktop:$ffmpegRuntimeVersion") {
-                version { strictly(ffmpegRuntimeVersion) }
+            api("io.github.shusek:kmedia-ffmpeg-runtime-desktop:$ffmpegDesktopRuntimeVersion") {
+                version { strictly(ffmpegDesktopRuntimeVersion) }
             }
             compileOnly(libs.graalvm.nativeimage)
             implementation(libs.jna)

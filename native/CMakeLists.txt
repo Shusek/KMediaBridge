@@ -102,4 +102,21 @@ if(BUILD_TESTING)
         target_link_libraries(kmedia_bridge_hdr_math_test PRIVATE m)
     endif()
     add_test(NAME kmedia_bridge_hdr_math COMMAND kmedia_bridge_hdr_math_test)
+
+    add_executable(
+        kmedia_bridge_avc_encoder_test
+        tests/kmedia_bridge_avc_encoder_test.c
+    )
+    target_include_directories(
+        kmedia_bridge_avc_encoder_test
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    )
+    target_link_libraries(kmedia_bridge_avc_encoder_test PRIVATE PkgConfig::FFMPEG)
+    target_compile_features(kmedia_bridge_avc_encoder_test PRIVATE c_std_11)
+    if(MSVC)
+        target_compile_options(kmedia_bridge_avc_encoder_test PRIVATE /W4 /WX)
+    else()
+        target_compile_options(kmedia_bridge_avc_encoder_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME kmedia_bridge_avc_encoder COMMAND kmedia_bridge_avc_encoder_test)
 endif()

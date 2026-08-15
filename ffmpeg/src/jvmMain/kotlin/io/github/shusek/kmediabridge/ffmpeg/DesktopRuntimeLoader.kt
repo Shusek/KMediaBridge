@@ -31,6 +31,13 @@ internal fun interface KmbWriteCallback : Callback {
     ): Int
 }
 
+internal fun interface KmbProgressCallback : Callback {
+    fun invoke(
+        opaque: Pointer?,
+        presentationTimeUs: Long,
+    ): Int
+}
+
 @Suppress("FunctionName", "ktlint:standard:function-naming")
 internal interface KmbNativeApi : Library {
     fun kmb_abi_version(): Int
@@ -91,6 +98,21 @@ internal interface KmbNativeApi : Library {
         preferredAudioTrackId: Int,
         preferredSubtitleTrackId: Int,
         writeCallback: KmbWriteCallback,
+        opaque: Pointer?,
+        outputError: PointerByReference,
+    ): Int
+
+    fun kmb_transcode_cast_mpeg_ts_hls(
+        inputLocator: String,
+        playlistPath: String,
+        segmentPathPattern: String,
+        segmentDurationUs: Long,
+        maximumPlaylistSegments: Int,
+        startTimeUs: Long,
+        preferredVideoTrackId: Int,
+        preferredAudioTrackId: Int,
+        preferredSubtitleTrackId: Int,
+        progressCallback: KmbProgressCallback,
         opaque: Pointer?,
         outputError: PointerByReference,
     ): Int
@@ -284,6 +306,54 @@ internal class LoadedFfmpegRuntime(
         }
     }
 
+    fun transcodeCastMpegTsHls(
+        inputLocator: String,
+        playlistPath: String,
+        segmentPathPattern: String,
+        segmentDurationUs: Long,
+        maximumPlaylistSegments: Int,
+        startTimeUs: Long,
+        preferredVideoTrackId: Int,
+        preferredAudioTrackId: Int,
+        preferredSubtitleTrackId: Int,
+        continueAt: (Long) -> Boolean,
+    ) {
+        val outputError = PointerByReference()
+        val callbackFailure = AtomicReference<Throwable?>(null)
+        val callback =
+            KmbProgressCallback { _, presentationTimeUs ->
+                try {
+                    if (continueAt(presentationTimeUs)) 0 else 1
+                } catch (failure: Throwable) {
+                    callbackFailure.compareAndSet(null, failure)
+                    1
+                }
+            }
+        val result =
+            api.kmb_transcode_cast_mpeg_ts_hls(
+                inputLocator,
+                playlistPath,
+                segmentPathPattern,
+                segmentDurationUs,
+                maximumPlaylistSegments,
+                startTimeUs,
+                preferredVideoTrackId,
+                preferredAudioTrackId,
+                preferredSubtitleTrackId,
+                callback,
+                null,
+                outputError,
+            )
+        val errorText = takeOwnedString(outputError.value)
+        callbackFailure.get()?.let { throw it }
+        if (result != KMB_OK && result != KMB_CANCELLED) {
+            throw MediaBridgeException(
+                MediaBridgeErrorCode.CONVERSION_FAILED,
+                errorText.ifBlank { "The native Cast MPEG-TS conversion failed without exposing a locator." },
+            )
+        }
+    }
+
     private fun takeOwnedString(pointer: Pointer?): String {
         if (pointer == null) return ""
         return try {
@@ -300,7 +370,7 @@ internal class LoadedFfmpegRuntime(
 }
 
 internal object DesktopRuntimeLoader {
-    private const val SUPPORTED_ABI = 4
+    private const val SUPPORTED_ABI = 5
     private const val MANIFEST_NAME = "manifest.properties"
 
     fun load(

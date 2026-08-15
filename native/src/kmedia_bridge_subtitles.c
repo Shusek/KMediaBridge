@@ -8,6 +8,8 @@
 
 #if defined(KMB_ENABLE_SUBTITLE_BURN_IN)
 
+#include "kmedia_bridge_avc_encoder.h"
+
 #include <libavcodec/avcodec.h>
 #include <libavfilter/avfilter.h>
 #include <libavfilter/buffersink.h>
@@ -21,6 +23,7 @@
 #include <libavutil/time.h>
 
 #include <errno.h>
+#include <math.h>
 #include <stddef.h>
 #include <stdio.h>
 
@@ -272,70 +275,74 @@ static KmbResult kmb_subtitle_open_decoder(KmbSubtitlePipeline *pipeline, char *
     return KMB_OK;
 }
 
-static const AVCodec *kmb_subtitle_find_encoder(void) {
-    static const char *const names[] = {
-        "h264_videotoolbox",
-        "h264_mf",
-        "h264_nvenc",
-        "libopenh264",
-        NULL,
-    };
-    int index = 0;
-    for (index = 0; names[index] != NULL; index++) {
-        const AVCodec *codec = avcodec_find_encoder_by_name(names[index]);
-        if (codec != NULL) {
-            return codec;
-        }
-    }
-    return NULL;
-}
-
 static KmbResult kmb_subtitle_open_encoder(KmbSubtitlePipeline *pipeline, char **output_error) {
-    const AVCodec *codec = kmb_subtitle_find_encoder();
+    KmbAvcEncoderAttempt attempts[8] = {0};
     AVStream *input_stream = pipeline->input->streams[pipeline->selected_video_track_id];
     AVRational frame_rate = av_guess_frame_rate(pipeline->input, input_stream, NULL);
-    AVDictionary *options = NULL;
-    int result = 0;
-    if (codec == NULL) {
+    double frames_per_second = 30.0;
+    int64_t bitrate = 0;
+    int attempt_count = 0;
+    int attempt_index = 0;
+    int found_encoder = 0;
+    int last_result = AVERROR_ENCODER_NOT_FOUND;
+    if (frame_rate.num <= 0 || frame_rate.den <= 0) frame_rate = (AVRational){30, 1};
+    frames_per_second = av_q2d(frame_rate);
+    if (!isfinite(frames_per_second) || frames_per_second <= 0.0 || frames_per_second > 240.0) {
+        frame_rate = (AVRational){30, 1};
+        frames_per_second = 30.0;
+    }
+    bitrate = (int64_t)(pipeline->decoder->width * (int64_t)pipeline->decoder->height *
+        frames_per_second / 8.0);
+    if (bitrate < 2000000) bitrate = 2000000;
+    if (bitrate > 16000000) bitrate = 16000000;
+    attempt_count = kmb_avc_encoder_attempts(attempts, 8);
+    for (attempt_index = 0; attempt_index < attempt_count; ++attempt_index) {
+        const KmbAvcEncoderAttempt *attempt = &attempts[attempt_index];
+        const AVCodec *codec = kmb_avc_encoder_find(attempt);
+        AVCodecContext *context = NULL;
+        AVDictionary *options = NULL;
+        if (codec == NULL) continue;
+        found_encoder = 1;
+        context = avcodec_alloc_context3(codec);
+        if (context == NULL) {
+            kmb_subtitle_set_error(output_error, "Could not allocate the AVC encoder.");
+            return KMB_ALLOCATION_FAILED;
+        }
+        context->width = pipeline->decoder->width;
+        context->height = pipeline->decoder->height;
+        context->sample_aspect_ratio = pipeline->decoder->sample_aspect_ratio;
+        if (context->sample_aspect_ratio.num <= 0 || context->sample_aspect_ratio.den <= 0) {
+            context->sample_aspect_ratio = (AVRational){1, 1};
+        }
+        context->pix_fmt = attempt->pixel_format;
+        context->time_base = input_stream->time_base;
+        if (context->time_base.num <= 0 || context->time_base.den <= 0) {
+            context->time_base = av_inv_q(frame_rate);
+        }
+        context->framerate = frame_rate;
+        context->bit_rate = bitrate;
+        context->gop_size = (int)(frames_per_second * 2.0 + 0.5);
+        context->max_b_frames = 0;
+        context->color_range = AVCOL_RANGE_MPEG;
+        context->color_primaries = AVCOL_PRI_BT709;
+        context->color_trc = AVCOL_TRC_BT709;
+        context->colorspace = AVCOL_SPC_BT709;
+        context->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+        kmb_avc_encoder_apply_options(attempt, &options);
+        last_result = avcodec_open2(context, codec, &options);
+        av_dict_free(&options);
+        if (last_result >= 0) {
+            pipeline->encoder = context;
+            return KMB_OK;
+        }
+        avcodec_free_context(&context);
+    }
+    if (!found_encoder) {
         kmb_subtitle_set_error(output_error, "No supported LGPL-compatible AVC encoder is available.");
-        return KMB_UNSUPPORTED;
+    } else {
+        kmb_subtitle_set_av_error(output_error, "Could not open an AVC encoder", last_result);
     }
-    pipeline->encoder = avcodec_alloc_context3(codec);
-    if (pipeline->encoder == NULL) {
-        kmb_subtitle_set_error(output_error, "Could not allocate the AVC encoder.");
-        return KMB_ALLOCATION_FAILED;
-    }
-    pipeline->encoder->width = pipeline->decoder->width;
-    pipeline->encoder->height = pipeline->decoder->height;
-    pipeline->encoder->sample_aspect_ratio = pipeline->decoder->sample_aspect_ratio;
-    pipeline->encoder->pix_fmt = AV_PIX_FMT_YUV420P;
-    pipeline->encoder->time_base = input_stream->time_base;
-    pipeline->encoder->framerate = frame_rate;
-    pipeline->encoder->bit_rate =
-        (int64_t)pipeline->encoder->width * pipeline->encoder->height *
-        (frame_rate.num > 0 && frame_rate.den > 0 ? frame_rate.num / frame_rate.den : 30) / 8;
-    if (pipeline->encoder->bit_rate < 2000000) {
-        pipeline->encoder->bit_rate = 2000000;
-    } else if (pipeline->encoder->bit_rate > 16000000) {
-        pipeline->encoder->bit_rate = 16000000;
-    }
-    pipeline->encoder->gop_size =
-        frame_rate.num > 0 && frame_rate.den > 0 ? 2 * frame_rate.num / frame_rate.den : 60;
-    pipeline->encoder->max_b_frames = 0;
-    pipeline->encoder->color_range = AVCOL_RANGE_MPEG;
-    pipeline->encoder->color_primaries = AVCOL_PRI_BT709;
-    pipeline->encoder->color_trc = AVCOL_TRC_BT709;
-    pipeline->encoder->colorspace = AVCOL_SPC_BT709;
-    pipeline->encoder->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-    av_dict_set(&options, "allow_sw", "1", 0);
-    av_dict_set(&options, "realtime", "1", 0);
-    result = avcodec_open2(pipeline->encoder, codec, &options);
-    av_dict_free(&options);
-    if (result < 0) {
-        kmb_subtitle_set_av_error(output_error, "Could not open the AVC encoder", result);
-        return KMB_UNSUPPORTED;
-    }
-    return KMB_OK;
+    return KMB_UNSUPPORTED;
 }
 
 static KmbResult kmb_subtitle_create_filter_graph(

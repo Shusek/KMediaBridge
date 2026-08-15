@@ -7,6 +7,8 @@
 
 #if defined(KMB_ENABLE_AVFOUNDATION_TRANSCODE)
 
+#include "kmedia_bridge_avc_encoder.h"
+
 #include <libavcodec/avcodec.h>
 #include <libavfilter/avfilter.h>
 #include <libavfilter/buffersink.h>
@@ -21,6 +23,7 @@
 #include <libavutil/mathematics.h>
 #include <libavutil/opt.h>
 #include <libavutil/pixfmt.h>
+#include <libavutil/samplefmt.h>
 #include <libswresample/swresample.h>
 
 #include <errno.h>
@@ -64,8 +67,11 @@ typedef struct KmbAvfPipeline {
     int video_pts_initialized;
     int64_t next_audio_pts;
     int audio_pts_initialized;
+    int synthesize_silent_audio;
     int64_t requested_start_time_us;
     KmbAvfWriteState write_state;
+    KmbProgressCallback progress_callback;
+    void *progress_opaque;
 } KmbAvfPipeline;
 
 static void kmb_avf_set_error(char **output_error, const char *message) {
@@ -300,35 +306,43 @@ static KmbResult kmb_avf_open_decoder(
     return KMB_OK;
 }
 
-static const AVCodec *kmb_avf_find_video_encoder(void) {
-    static const char *const names[] = {
-        "h264_videotoolbox",
-        "h264_mf",
-        "h264_nvenc",
-        "libopenh264",
-        NULL,
-    };
-    int index = 0;
-    for (index = 0; names[index] != NULL; index++) {
-        const AVCodec *codec = avcodec_find_encoder_by_name(names[index]);
-        if (codec != NULL) {
-            return codec;
-        }
+static void kmb_avf_compatibility_dimensions(
+    int input_width,
+    int input_height,
+    int *output_width,
+    int *output_height
+) {
+    const int maximum_width = 1920;
+    const int maximum_height = 1080;
+    double scale = 1.0;
+    int scaled_width = input_width;
+    int scaled_height = input_height;
+    if (input_width > maximum_width || input_height > maximum_height) {
+        scale = fmin(
+            maximum_width / (double)input_width,
+            maximum_height / (double)input_height
+        );
+        scaled_width = (int)floor(input_width * scale);
+        scaled_height = (int)floor(input_height * scale);
+        scaled_width -= scaled_width & 1;
+        scaled_height -= scaled_height & 1;
     }
-    return NULL;
+    *output_width = scaled_width < 2 ? 2 : scaled_width;
+    *output_height = scaled_height < 2 ? 2 : scaled_height;
 }
 
 static KmbResult kmb_avf_open_video_encoder(KmbAvfPipeline *pipeline, char **output_error) {
-    const AVCodec *codec = kmb_avf_find_video_encoder();
+    KmbAvcEncoderAttempt attempts[8] = {0};
     AVStream *input_stream = pipeline->input->streams[pipeline->selected_video_track_id];
     AVRational frame_rate = av_guess_frame_rate(pipeline->input, input_stream, NULL);
-    AVDictionary *options = NULL;
     double frames_per_second = av_q2d(frame_rate);
-    int result = 0;
-    if (codec == NULL) {
-        kmb_avf_set_error(output_error, "No supported LGPL-compatible AVC encoder is available.");
-        return KMB_UNSUPPORTED;
-    }
+    int64_t bitrate = 0;
+    int output_width = 0;
+    int output_height = 0;
+    int attempt_count = 0;
+    int attempt_index = 0;
+    int found_encoder = 0;
+    int last_result = AVERROR_ENCODER_NOT_FOUND;
     if (pipeline->video_decoder->width <= 0 || pipeline->video_decoder->height <= 0 ||
         (pipeline->video_decoder->width & 1) != 0 || (pipeline->video_decoder->height & 1) != 0) {
         kmb_avf_set_error(output_error, "The video dimensions cannot be represented by AVC 4:2:0 output.");
@@ -338,43 +352,63 @@ static KmbResult kmb_avf_open_video_encoder(KmbAvfPipeline *pipeline, char **out
         frame_rate = (AVRational){30, 1};
         frames_per_second = 30.0;
     }
-    pipeline->video_encoder = avcodec_alloc_context3(codec);
-    if (pipeline->video_encoder == NULL) {
-        kmb_avf_set_error(output_error, "Could not allocate the AVC encoder.");
-        return KMB_ALLOCATION_FAILED;
+    kmb_avf_compatibility_dimensions(
+        pipeline->video_decoder->width,
+        pipeline->video_decoder->height,
+        &output_width,
+        &output_height
+    );
+    bitrate = (int64_t)(output_width * (int64_t)output_height * frames_per_second / 8.0);
+    if (bitrate < 2000000) bitrate = 2000000;
+    if (bitrate > 16000000) bitrate = 16000000;
+    attempt_count = kmb_avc_encoder_attempts(attempts, 8);
+    for (attempt_index = 0; attempt_index < attempt_count; ++attempt_index) {
+        const KmbAvcEncoderAttempt *attempt = &attempts[attempt_index];
+        const AVCodec *codec = kmb_avc_encoder_find(attempt);
+        AVCodecContext *context = NULL;
+        AVDictionary *options = NULL;
+        if (codec == NULL) continue;
+        found_encoder = 1;
+        context = avcodec_alloc_context3(codec);
+        if (context == NULL) {
+            kmb_avf_set_error(output_error, "Could not allocate the AVC encoder.");
+            return KMB_ALLOCATION_FAILED;
+        }
+        context->width = output_width;
+        context->height = output_height;
+        context->sample_aspect_ratio = pipeline->video_decoder->sample_aspect_ratio;
+        if (context->sample_aspect_ratio.num <= 0 || context->sample_aspect_ratio.den <= 0) {
+            context->sample_aspect_ratio = (AVRational){1, 1};
+        }
+        context->pix_fmt = attempt->pixel_format;
+        context->time_base = input_stream->time_base;
+        if (context->time_base.num <= 0 || context->time_base.den <= 0) {
+            context->time_base = av_inv_q(frame_rate);
+        }
+        context->framerate = frame_rate;
+        context->bit_rate = bitrate;
+        context->gop_size = (int)(frames_per_second * 2.0 + 0.5);
+        context->max_b_frames = 0;
+        context->color_range = AVCOL_RANGE_MPEG;
+        context->color_primaries = AVCOL_PRI_BT709;
+        context->color_trc = AVCOL_TRC_BT709;
+        context->colorspace = AVCOL_SPC_BT709;
+        context->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+        kmb_avc_encoder_apply_options(attempt, &options);
+        last_result = avcodec_open2(context, codec, &options);
+        av_dict_free(&options);
+        if (last_result >= 0) {
+            pipeline->video_encoder = context;
+            return KMB_OK;
+        }
+        avcodec_free_context(&context);
     }
-    pipeline->video_encoder->width = pipeline->video_decoder->width;
-    pipeline->video_encoder->height = pipeline->video_decoder->height;
-    pipeline->video_encoder->sample_aspect_ratio = pipeline->video_decoder->sample_aspect_ratio;
-    pipeline->video_encoder->pix_fmt = AV_PIX_FMT_YUV420P;
-    pipeline->video_encoder->time_base = input_stream->time_base;
-    if (pipeline->video_encoder->time_base.num <= 0 || pipeline->video_encoder->time_base.den <= 0) {
-        pipeline->video_encoder->time_base = av_inv_q(frame_rate);
+    if (!found_encoder) {
+        kmb_avf_set_error(output_error, "No supported LGPL-compatible AVC encoder is available.");
+    } else {
+        kmb_avf_set_av_error(output_error, "Could not open an AVC encoder", last_result);
     }
-    pipeline->video_encoder->framerate = frame_rate;
-    pipeline->video_encoder->bit_rate =
-        (int64_t)(pipeline->video_encoder->width * pipeline->video_encoder->height * frames_per_second / 8.0);
-    if (pipeline->video_encoder->bit_rate < 2000000) {
-        pipeline->video_encoder->bit_rate = 2000000;
-    } else if (pipeline->video_encoder->bit_rate > 16000000) {
-        pipeline->video_encoder->bit_rate = 16000000;
-    }
-    pipeline->video_encoder->gop_size = (int)(frames_per_second * 2.0 + 0.5);
-    pipeline->video_encoder->max_b_frames = 0;
-    pipeline->video_encoder->color_range = AVCOL_RANGE_MPEG;
-    pipeline->video_encoder->color_primaries = AVCOL_PRI_BT709;
-    pipeline->video_encoder->color_trc = AVCOL_TRC_BT709;
-    pipeline->video_encoder->colorspace = AVCOL_SPC_BT709;
-    pipeline->video_encoder->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-    av_dict_set(&options, "allow_sw", "1", 0);
-    av_dict_set(&options, "realtime", "1", 0);
-    result = avcodec_open2(pipeline->video_encoder, codec, &options);
-    av_dict_free(&options);
-    if (result < 0) {
-        kmb_avf_set_av_error(output_error, "Could not open the AVC encoder", result);
-        return KMB_UNSUPPORTED;
-    }
-    return KMB_OK;
+    return KMB_UNSUPPORTED;
 }
 
 static KmbResult kmb_avf_create_video_filter(
@@ -477,7 +511,9 @@ static KmbResult kmb_avf_create_video_filter(
     snprintf(
         scale_arguments,
         sizeof(scale_arguments),
-        "in_color_matrix=%d:out_color_matrix=%d:in_range=%d:out_range=%d",
+        "w=%d:h=%d:in_color_matrix=%d:out_color_matrix=%d:in_range=%d:out_range=%d",
+        pipeline->video_encoder->width,
+        pipeline->video_encoder->height,
         input_colorspace,
         AVCOL_SPC_BT709,
         input_range,
@@ -534,14 +570,14 @@ static KmbResult kmb_avf_open_audio_encoder(KmbAvfPipeline *pipeline, char **out
     const AVCodec *codec = avcodec_find_encoder(AV_CODEC_ID_AAC);
     const enum AVSampleFormat *sample_formats = NULL;
     int sample_format_count = 0;
-    int channels = pipeline->audio_decoder->ch_layout.nb_channels;
-    int input_sample_rate = pipeline->audio_decoder->sample_rate;
+    int channels = pipeline->audio_decoder != NULL ? pipeline->audio_decoder->ch_layout.nb_channels : 2;
+    int input_sample_rate = pipeline->audio_decoder != NULL ? pipeline->audio_decoder->sample_rate : 48000;
     int result = 0;
     if (codec == NULL) {
         kmb_avf_set_error(output_error, "The selected runtime has no AAC encoder.");
         return KMB_UNSUPPORTED;
     }
-    if (channels <= 0) {
+    if (channels <= 0 && pipeline->selected_audio_track_id >= 0) {
         channels = pipeline->input->streams[pipeline->selected_audio_track_id]->codecpar->ch_layout.nb_channels;
     }
     if (channels <= 0 || input_sample_rate <= 0) {
@@ -575,6 +611,11 @@ static KmbResult kmb_avf_open_audio_encoder(KmbAvfPipeline *pipeline, char **out
     if (result < 0) {
         kmb_avf_set_av_error(output_error, "Could not open the AAC encoder", result);
         return KMB_UNSUPPORTED;
+    }
+    if (pipeline->audio_decoder == NULL) {
+        pipeline->audio_pts_initialized = 1;
+        pipeline->next_audio_pts = 0;
+        return KMB_OK;
     }
     if (pipeline->audio_decoder->ch_layout.nb_channels <= 0) {
         av_channel_layout_default(&pipeline->audio_decoder->ch_layout, channels);
@@ -614,12 +655,25 @@ static KmbResult kmb_avf_open_audio_encoder(KmbAvfPipeline *pipeline, char **out
 static KmbResult kmb_avf_open_output(
     KmbAvfPipeline *pipeline,
     int64_t fragment_duration_us,
+    const char *hls_playlist_path,
+    const char *hls_segment_path_pattern,
+    int maximum_playlist_segments,
     char **output_error
 ) {
     AVStream *video_output = NULL;
-    int result = avformat_alloc_output_context2(&pipeline->output, NULL, "mp4", NULL);
+    const int is_mpeg_ts_hls = hls_playlist_path != NULL;
+    int result = avformat_alloc_output_context2(
+        &pipeline->output,
+        NULL,
+        is_mpeg_ts_hls ? "hls" : "mp4",
+        hls_playlist_path
+    );
     if (result < 0 || pipeline->output == NULL) {
-        kmb_avf_set_av_error(output_error, "Could not create fragmented MP4 output", result);
+        kmb_avf_set_av_error(
+            output_error,
+            is_mpeg_ts_hls ? "Could not create MPEG-TS HLS output" : "Could not create fragmented MP4 output",
+            result
+        );
         return KMB_OPEN_OUTPUT_FAILED;
     }
     video_output = avformat_new_stream(pipeline->output, NULL);
@@ -634,7 +688,7 @@ static KmbResult kmb_avf_open_output(
         kmb_avf_set_av_error(output_error, "Could not publish AVC encoder parameters", result);
         return KMB_OPEN_OUTPUT_FAILED;
     }
-    video_output->codecpar->codec_tag = MKTAG('a', 'v', 'c', '1');
+    video_output->codecpar->codec_tag = is_mpeg_ts_hls ? 0 : MKTAG('a', 'v', 'c', '1');
     pipeline->output_audio_track_id = -1;
     if (pipeline->audio_encoder != NULL) {
         AVStream *audio_output = avformat_new_stream(pipeline->output, NULL);
@@ -651,40 +705,65 @@ static KmbResult kmb_avf_open_output(
         }
         audio_output->codecpar->codec_tag = 0;
     }
-    pipeline->custom_buffer = av_malloc(32 * 1024);
-    if (pipeline->custom_buffer == NULL) {
-        kmb_avf_set_error(output_error, "Could not allocate the output callback buffer.");
-        return KMB_ALLOCATION_FAILED;
+    if (is_mpeg_ts_hls) {
+        char segment_duration_seconds[64] = {0};
+        snprintf(
+            segment_duration_seconds,
+            sizeof(segment_duration_seconds),
+            "%.6f",
+            fragment_duration_us / 1000000.0
+        );
+        av_dict_set(&pipeline->muxer_options, "hls_time", segment_duration_seconds, 0);
+        av_dict_set_int(&pipeline->muxer_options, "hls_list_size", maximum_playlist_segments, 0);
+        av_dict_set_int(&pipeline->muxer_options, "hls_delete_threshold", 2, 0);
+        av_dict_set(&pipeline->muxer_options, "hls_segment_type", "mpegts", 0);
+        av_dict_set(
+            &pipeline->muxer_options,
+            "hls_flags",
+            "delete_segments+independent_segments+temp_file",
+            0
+        );
+        av_dict_set(&pipeline->muxer_options, "hls_segment_filename", hls_segment_path_pattern, 0);
+    } else {
+        pipeline->custom_buffer = av_malloc(32 * 1024);
+        if (pipeline->custom_buffer == NULL) {
+            kmb_avf_set_error(output_error, "Could not allocate the output callback buffer.");
+            return KMB_ALLOCATION_FAILED;
+        }
+        pipeline->custom_io = avio_alloc_context(
+            pipeline->custom_buffer,
+            32 * 1024,
+            1,
+            &pipeline->write_state,
+            NULL,
+            kmb_avf_write_packet,
+            NULL
+        );
+        if (pipeline->custom_io == NULL) {
+            kmb_avf_set_error(output_error, "Could not create the output callback context.");
+            return KMB_ALLOCATION_FAILED;
+        }
+        pipeline->custom_buffer = NULL;
+        pipeline->output->pb = pipeline->custom_io;
+        pipeline->output->flags |= AVFMT_FLAG_CUSTOM_IO;
+        av_dict_set(
+            &pipeline->muxer_options,
+            "movflags",
+            "frag_keyframe+delay_moov+default_base_moof+negative_cts_offsets",
+            0
+        );
+        av_dict_set_int(&pipeline->muxer_options, "frag_duration", fragment_duration_us, 0);
     }
-    pipeline->custom_io = avio_alloc_context(
-        pipeline->custom_buffer,
-        32 * 1024,
-        1,
-        &pipeline->write_state,
-        NULL,
-        kmb_avf_write_packet,
-        NULL
-    );
-    if (pipeline->custom_io == NULL) {
-        kmb_avf_set_error(output_error, "Could not create the output callback context.");
-        return KMB_ALLOCATION_FAILED;
-    }
-    pipeline->custom_buffer = NULL;
-    pipeline->output->pb = pipeline->custom_io;
-    pipeline->output->flags |= AVFMT_FLAG_CUSTOM_IO;
-    av_dict_set(
-        &pipeline->muxer_options,
-        "movflags",
-        "frag_keyframe+delay_moov+default_base_moof+negative_cts_offsets",
-        0
-    );
-    av_dict_set_int(&pipeline->muxer_options, "frag_duration", fragment_duration_us, 0);
     result = avformat_write_header(pipeline->output, &pipeline->muxer_options);
     if (result < 0) {
         if (pipeline->write_state.cancelled) {
             return KMB_CANCELLED;
         }
-        kmb_avf_set_av_error(output_error, "Could not write the fragmented MP4 header", result);
+        kmb_avf_set_av_error(
+            output_error,
+            is_mpeg_ts_hls ? "Could not write the MPEG-TS HLS header" : "Could not write the fragmented MP4 header",
+            result
+        );
         return KMB_WRITE_FAILED;
     }
     return KMB_OK;
@@ -701,6 +780,23 @@ static KmbResult kmb_avf_write_video_packets(KmbAvfPipeline *pipeline, char **ou
                 av_inv_q(pipeline->video_encoder->framerate),
                 pipeline->video_encoder->time_base
             );
+        }
+        if (pipeline->progress_callback != NULL) {
+            const int64_t packet_time = pipeline->video_packet->pts != AV_NOPTS_VALUE
+                ? pipeline->video_packet->pts
+                : pipeline->video_packet->dts;
+            if (packet_time != AV_NOPTS_VALUE) {
+                const int64_t presentation_time_us = av_rescale_q(
+                    packet_time,
+                    pipeline->video_encoder->time_base,
+                    AV_TIME_BASE_Q
+                );
+                if (pipeline->progress_callback(pipeline->progress_opaque, presentation_time_us) != 0) {
+                    pipeline->write_state.cancelled = 1;
+                    av_packet_unref(pipeline->video_packet);
+                    return KMB_CANCELLED;
+                }
+            }
         }
         av_packet_rescale_ts(
             pipeline->video_packet,
@@ -722,6 +818,67 @@ static KmbResult kmb_avf_write_video_packets(KmbAvfPipeline *pipeline, char **ou
     if (result != AVERROR(EAGAIN) && result != AVERROR_EOF) {
         kmb_avf_set_av_error(output_error, "Could not receive an encoded video packet", result);
         return KMB_WRITE_FAILED;
+    }
+    return KMB_OK;
+}
+
+static KmbResult kmb_avf_write_audio_packets(KmbAvfPipeline *pipeline, char **output_error);
+
+static KmbResult kmb_avf_encode_silent_audio_until(
+    KmbAvfPipeline *pipeline,
+    int64_t target_audio_pts,
+    int drain_partial,
+    char **output_error
+) {
+    const int frame_size = pipeline->audio_encoder->frame_size > 0
+        ? pipeline->audio_encoder->frame_size
+        : 1024;
+    while (pipeline->next_audio_pts < target_audio_pts) {
+        AVFrame *frame = NULL;
+        int64_t remaining = target_audio_pts - pipeline->next_audio_pts;
+        int result = 0;
+        KmbResult bridge_result = KMB_OK;
+        if (!drain_partial && remaining < frame_size) {
+            break;
+        }
+        frame = av_frame_alloc();
+        if (frame == NULL) {
+            kmb_avf_set_error(output_error, "Could not allocate a silent AAC input frame.");
+            return KMB_ALLOCATION_FAILED;
+        }
+        frame->nb_samples = frame_size;
+        frame->format = pipeline->audio_encoder->sample_fmt;
+        frame->sample_rate = pipeline->audio_encoder->sample_rate;
+        result = av_channel_layout_copy(&frame->ch_layout, &pipeline->audio_encoder->ch_layout);
+        if (result >= 0) {
+            result = av_frame_get_buffer(frame, 0);
+        }
+        if (result >= 0) {
+            result = av_samples_set_silence(
+                frame->data,
+                0,
+                frame_size,
+                pipeline->audio_encoder->ch_layout.nb_channels,
+                pipeline->audio_encoder->sample_fmt
+            );
+        }
+        if (result < 0) {
+            av_frame_free(&frame);
+            kmb_avf_set_av_error(output_error, "Could not prepare a silent AAC input frame", result);
+            return KMB_WRITE_FAILED;
+        }
+        frame->pts = pipeline->next_audio_pts;
+        pipeline->next_audio_pts += frame_size;
+        result = avcodec_send_frame(pipeline->audio_encoder, frame);
+        av_frame_free(&frame);
+        if (result < 0) {
+            kmb_avf_set_av_error(output_error, "Could not submit a silent AAC input frame", result);
+            return KMB_WRITE_FAILED;
+        }
+        bridge_result = kmb_avf_write_audio_packets(pipeline, output_error);
+        if (bridge_result != KMB_OK) {
+            return bridge_result;
+        }
     }
     return KMB_OK;
 }
@@ -781,6 +938,22 @@ static KmbResult kmb_avf_encode_filtered_video(KmbAvfPipeline *pipeline, char **
         bridge_result = kmb_avf_write_video_packets(pipeline, output_error);
         if (bridge_result != KMB_OK) {
             return bridge_result;
+        }
+        if (pipeline->synthesize_silent_audio) {
+            int64_t target_audio_pts = av_rescale_q(
+                pipeline->next_video_pts,
+                pipeline->video_encoder->time_base,
+                pipeline->audio_encoder->time_base
+            );
+            bridge_result = kmb_avf_encode_silent_audio_until(
+                pipeline,
+                target_audio_pts,
+                0,
+                output_error
+            );
+            if (bridge_result != KMB_OK) {
+                return bridge_result;
+            }
         }
     }
     if (result != AVERROR(EAGAIN) && result != AVERROR_EOF) {
@@ -1093,20 +1266,37 @@ static KmbResult kmb_avf_flush(KmbAvfPipeline *pipeline, char **output_error) {
         return KMB_WRITE_FAILED;
     }
     bridge_result = kmb_avf_write_video_packets(pipeline, output_error);
-    if (bridge_result != KMB_OK || pipeline->audio_decoder == NULL) {
+    if (bridge_result != KMB_OK || pipeline->audio_encoder == NULL) {
         return bridge_result;
     }
-    bridge_result = kmb_avf_decode_audio_packet(pipeline, NULL, output_error);
-    if (bridge_result != KMB_OK) {
-        return bridge_result;
-    }
-    bridge_result = kmb_avf_flush_audio_resampler(pipeline, output_error);
-    if (bridge_result != KMB_OK) {
-        return bridge_result;
-    }
-    bridge_result = kmb_avf_encode_audio_fifo(pipeline, 1, output_error);
-    if (bridge_result != KMB_OK) {
-        return bridge_result;
+    if (pipeline->audio_decoder != NULL) {
+        bridge_result = kmb_avf_decode_audio_packet(pipeline, NULL, output_error);
+        if (bridge_result != KMB_OK) {
+            return bridge_result;
+        }
+        bridge_result = kmb_avf_flush_audio_resampler(pipeline, output_error);
+        if (bridge_result != KMB_OK) {
+            return bridge_result;
+        }
+        bridge_result = kmb_avf_encode_audio_fifo(pipeline, 1, output_error);
+        if (bridge_result != KMB_OK) {
+            return bridge_result;
+        }
+    } else if (pipeline->synthesize_silent_audio) {
+        int64_t target_audio_pts = av_rescale_q(
+            pipeline->next_video_pts,
+            pipeline->video_encoder->time_base,
+            pipeline->audio_encoder->time_base
+        );
+        bridge_result = kmb_avf_encode_silent_audio_until(
+            pipeline,
+            target_audio_pts,
+            1,
+            output_error
+        );
+        if (bridge_result != KMB_OK) {
+            return bridge_result;
+        }
     }
     result = avcodec_send_frame(pipeline->audio_encoder, NULL);
     if (result < 0) {
@@ -1143,13 +1333,13 @@ static KmbResult kmb_avf_run(KmbAvfPipeline *pipeline, char **output_error) {
         if (pipeline->write_state.cancelled) {
             return KMB_CANCELLED;
         }
-        kmb_avf_set_av_error(output_error, "Could not finalize fragmented MP4 output", result);
+        kmb_avf_set_av_error(output_error, "Could not finalize compatibility output", result);
         return KMB_WRITE_FAILED;
     }
     return KMB_OK;
 }
 
-KmbResult kmb_transcode_avfoundation_fragmented_mp4_stream(
+static KmbResult kmb_avf_transcode_internal(
     const char *input_locator,
     int64_t fragment_duration_us,
     int64_t start_time_us,
@@ -1157,21 +1347,19 @@ KmbResult kmb_transcode_avfoundation_fragmented_mp4_stream(
     int32_t preferred_audio_track_id,
     int32_t preferred_subtitle_track_id,
     KmbWriteCallback write_callback,
-    void *opaque,
+    KmbProgressCallback progress_callback,
+    void *callback_opaque,
+    const char *hls_playlist_path,
+    const char *hls_segment_path_pattern,
+    int maximum_playlist_segments,
     char **output_error
 ) {
     KmbAvfPipeline pipeline = {0};
     KmbResult bridge_result = KMB_OK;
-    if (output_error != NULL) {
-        *output_error = NULL;
-    }
-    if (input_locator == NULL || fragment_duration_us <= 0 || start_time_us < 0 ||
-        preferred_subtitle_track_id < -2 || write_callback == NULL) {
-        kmb_avf_set_error(output_error, "Valid input, callback, track ids, duration, and start time are required.");
-        return KMB_INVALID_ARGUMENT;
-    }
     pipeline.requested_start_time_us = start_time_us;
-    pipeline.write_state = (KmbAvfWriteState){write_callback, opaque, 0};
+    pipeline.write_state = (KmbAvfWriteState){write_callback, callback_opaque, 0};
+    pipeline.progress_callback = progress_callback;
+    pipeline.progress_opaque = callback_opaque;
     bridge_result = kmb_avf_open_input(
         &pipeline,
         input_locator,
@@ -1181,6 +1369,12 @@ KmbResult kmb_transcode_avfoundation_fragmented_mp4_stream(
         start_time_us,
         output_error
     );
+    if (bridge_result == KMB_OK) {
+        pipeline.synthesize_silent_audio =
+            hls_playlist_path != NULL &&
+            preferred_audio_track_id != -2 &&
+            pipeline.selected_audio_track_id < 0;
+    }
     if (bridge_result == KMB_OK) {
         bridge_result = kmb_avf_open_decoder(
             &pipeline,
@@ -1205,25 +1399,35 @@ KmbResult kmb_transcode_avfoundation_fragmented_mp4_stream(
     if (bridge_result == KMB_OK) {
         bridge_result = kmb_avf_create_video_filter(&pipeline, input_locator, output_error);
     }
-    if (bridge_result == KMB_OK && pipeline.audio_decoder != NULL) {
+    if (bridge_result == KMB_OK &&
+        (pipeline.audio_decoder != NULL || pipeline.synthesize_silent_audio)) {
         bridge_result = kmb_avf_open_audio_encoder(&pipeline, output_error);
     }
     if (bridge_result == KMB_OK) {
-        bridge_result = kmb_avf_open_output(&pipeline, fragment_duration_us, output_error);
+        bridge_result = kmb_avf_open_output(
+            &pipeline,
+            fragment_duration_us,
+            hls_playlist_path,
+            hls_segment_path_pattern,
+            maximum_playlist_segments,
+            output_error
+        );
     }
     if (bridge_result == KMB_OK) {
         pipeline.input_packet = av_packet_alloc();
         pipeline.video_packet = av_packet_alloc();
         pipeline.video_decoded_frame = av_frame_alloc();
         pipeline.video_filtered_frame = av_frame_alloc();
-        if (pipeline.audio_decoder != NULL) {
+        if (pipeline.audio_encoder != NULL) {
             pipeline.audio_packet = av_packet_alloc();
+        }
+        if (pipeline.audio_decoder != NULL) {
             pipeline.audio_decoded_frame = av_frame_alloc();
         }
         if (pipeline.input_packet == NULL || pipeline.video_packet == NULL ||
             pipeline.video_decoded_frame == NULL || pipeline.video_filtered_frame == NULL ||
-            (pipeline.audio_decoder != NULL &&
-                (pipeline.audio_packet == NULL || pipeline.audio_decoded_frame == NULL))) {
+            (pipeline.audio_encoder != NULL && pipeline.audio_packet == NULL) ||
+            (pipeline.audio_decoder != NULL && pipeline.audio_decoded_frame == NULL)) {
             kmb_avf_set_error(output_error, "Could not allocate compatibility conversion frames and packets.");
             bridge_result = KMB_ALLOCATION_FAILED;
         }
@@ -1233,6 +1437,85 @@ KmbResult kmb_transcode_avfoundation_fragmented_mp4_stream(
     }
     kmb_avf_cleanup(&pipeline);
     return bridge_result;
+}
+
+KmbResult kmb_transcode_avfoundation_fragmented_mp4_stream(
+    const char *input_locator,
+    int64_t fragment_duration_us,
+    int64_t start_time_us,
+    int32_t preferred_video_track_id,
+    int32_t preferred_audio_track_id,
+    int32_t preferred_subtitle_track_id,
+    KmbWriteCallback write_callback,
+    void *opaque,
+    char **output_error
+) {
+    if (output_error != NULL) {
+        *output_error = NULL;
+    }
+    if (input_locator == NULL || fragment_duration_us <= 0 || start_time_us < 0 ||
+        preferred_subtitle_track_id < -2 || write_callback == NULL) {
+        kmb_avf_set_error(output_error, "Valid input, callback, track ids, duration, and start time are required.");
+        return KMB_INVALID_ARGUMENT;
+    }
+    return kmb_avf_transcode_internal(
+        input_locator,
+        fragment_duration_us,
+        start_time_us,
+        preferred_video_track_id,
+        preferred_audio_track_id,
+        preferred_subtitle_track_id,
+        write_callback,
+        NULL,
+        opaque,
+        NULL,
+        NULL,
+        0,
+        output_error
+    );
+}
+
+KmbResult kmb_transcode_cast_mpeg_ts_hls(
+    const char *input_locator,
+    const char *playlist_path,
+    const char *segment_path_pattern,
+    int64_t segment_duration_us,
+    int32_t maximum_playlist_segments,
+    int64_t start_time_us,
+    int32_t preferred_video_track_id,
+    int32_t preferred_audio_track_id,
+    int32_t preferred_subtitle_track_id,
+    KmbProgressCallback progress_callback,
+    void *opaque,
+    char **output_error
+) {
+    if (output_error != NULL) {
+        *output_error = NULL;
+    }
+    if (input_locator == NULL || playlist_path == NULL || segment_path_pattern == NULL ||
+        segment_duration_us <= 0 || maximum_playlist_segments < 3 || start_time_us < 0 ||
+        preferred_subtitle_track_id < -2 || progress_callback == NULL) {
+        kmb_avf_set_error(
+            output_error,
+            "Valid input, private HLS paths, callback, track ids, duration, and playlist limit are required."
+        );
+        return KMB_INVALID_ARGUMENT;
+    }
+    return kmb_avf_transcode_internal(
+        input_locator,
+        segment_duration_us,
+        start_time_us,
+        preferred_video_track_id,
+        preferred_audio_track_id,
+        preferred_subtitle_track_id,
+        NULL,
+        progress_callback,
+        opaque,
+        playlist_path,
+        segment_path_pattern,
+        maximum_playlist_segments,
+        output_error
+    );
 }
 
 #else
@@ -1255,6 +1538,37 @@ KmbResult kmb_transcode_avfoundation_fragmented_mp4_stream(
     (void)preferred_audio_track_id;
     (void)preferred_subtitle_track_id;
     (void)write_callback;
+    (void)opaque;
+    if (output_error != NULL) {
+        *output_error = av_strdup("This runtime does not include AVC/AAC compatibility transcoding.");
+    }
+    return KMB_UNSUPPORTED;
+}
+
+KmbResult kmb_transcode_cast_mpeg_ts_hls(
+    const char *input_locator,
+    const char *playlist_path,
+    const char *segment_path_pattern,
+    int64_t segment_duration_us,
+    int32_t maximum_playlist_segments,
+    int64_t start_time_us,
+    int32_t preferred_video_track_id,
+    int32_t preferred_audio_track_id,
+    int32_t preferred_subtitle_track_id,
+    KmbProgressCallback progress_callback,
+    void *opaque,
+    char **output_error
+) {
+    (void)input_locator;
+    (void)playlist_path;
+    (void)segment_path_pattern;
+    (void)segment_duration_us;
+    (void)maximum_playlist_segments;
+    (void)start_time_us;
+    (void)preferred_video_track_id;
+    (void)preferred_audio_track_id;
+    (void)preferred_subtitle_track_id;
+    (void)progress_callback;
     (void)opaque;
     if (output_error != NULL) {
         *output_error = av_strdup("This runtime does not include AVC/AAC compatibility transcoding.");

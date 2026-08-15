@@ -215,7 +215,7 @@ def write_manifest(
     if avfoundation_compatibility:
         input_containers.extend(["AVI", "ASF"])
     values = [
-        ("schemaVersion", "1"), ("platform", target), ("abiVersion", "4"),
+        ("schemaVersion", "1"), ("platform", target), ("abiVersion", "5"),
         ("sharedRuntimeId", runtime["runtimeId"]),
         ("sharedRuntimeVersion", runtime["distributionVersion"]),
         ("ffmpegVersion", runtime["version.ffmpeg"]),

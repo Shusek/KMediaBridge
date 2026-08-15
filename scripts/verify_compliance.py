@@ -81,12 +81,20 @@ def verify_boundary(root: Path) -> None:
         if f'"{forbidden}"' in builder:
             fail(f"unsupported target is present in client builder: {forbidden}")
 
-    for relative, coordinate in (
-        ("ffmpeg-runtime-android/build.gradle.kts", "kmedia-ffmpeg-runtime-android"),
-        ("ffmpeg-runtime-desktop/build.gradle.kts", "kmedia-ffmpeg-runtime-desktop"),
+    for relative, coordinate, pinned_version in (
+        (
+            "ffmpeg-runtime-android/build.gradle.kts",
+            "kmedia-ffmpeg-runtime-android",
+            "ffmpegRuntimeVersion",
+        ),
+        (
+            "ffmpeg-runtime-desktop/build.gradle.kts",
+            "kmedia-ffmpeg-runtime-desktop",
+            "ffmpegDesktopRuntimeVersion",
+        ),
     ):
         source = (root / relative).read_text(encoding="utf-8")
-        if coordinate not in source or "strictly(ffmpegRuntimeVersion)" not in source:
+        if coordinate not in source or f"strictly({pinned_version})" not in source:
             fail(f"{relative} does not pin the exact shared runtime")
     backend = (root / "ffmpeg/build.gradle.kts").read_text(encoding="utf-8")
     if 'api(project(":ffmpeg-runtime-android"))' not in backend or 'api(project(":ffmpeg-runtime-desktop"))' not in backend:

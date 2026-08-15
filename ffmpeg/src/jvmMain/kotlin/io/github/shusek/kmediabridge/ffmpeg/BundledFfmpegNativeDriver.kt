@@ -114,6 +114,14 @@ public class BundledFfmpegNativeDriver private constructor(
         input: MediaInput,
         request: BridgeRequest,
     ): MediaBridgeSession {
+        val prepared = prepare(input, request)
+        return DesktopFfmpegSession(runtime, input, request, prepared.outputInfo)
+    }
+
+    internal suspend fun prepare(
+        input: MediaInput,
+        request: BridgeRequest,
+    ): PreparedDesktopFfmpegOutput {
         unsupportedReason(input, request)?.let { reason ->
             throw MediaBridgeException(MediaBridgeErrorCode.UNSUPPORTED_REQUEST, reason)
         }
@@ -192,7 +200,33 @@ public class BundledFfmpegNativeDriver private constructor(
                         videoTrack.colorInfo
                     },
             )
-        return DesktopFfmpegSession(runtime, input, request, outputInfo)
+        return PreparedDesktopFfmpegOutput(probe = probe, outputInfo = outputInfo)
+    }
+
+    internal fun transcodeCastMpegTsHls(
+        input: MediaInput,
+        outputInfo: MediaOutputInfo,
+        playlistPath: Path,
+        segmentPathPattern: Path,
+        segmentDurationUs: Long,
+        maximumPlaylistSegments: Int,
+        startTimeUs: Long,
+        continueAt: (Long) -> Boolean,
+    ) {
+        runtime.transcodeCastMpegTsHls(
+            inputLocator = input.locator,
+            playlistPath = playlistPath.toString(),
+            segmentPathPattern = segmentPathPattern.toString(),
+            segmentDurationUs = segmentDurationUs,
+            maximumPlaylistSegments = maximumPlaylistSegments,
+            startTimeUs = startTimeUs,
+            preferredVideoTrackId = outputInfo.selectedVideoTrackId ?: -1,
+            preferredAudioTrackId =
+                outputInfo.selectedAudioTrackId
+                    ?: if (outputInfo.audioHandling == AudioHandling.TRANSCODE_AAC) -1 else -2,
+            preferredSubtitleTrackId = outputInfo.selectedSubtitleTrackId ?: -2,
+            continueAt = continueAt,
+        )
     }
 
     private fun requireLocalUnencryptedInput(input: MediaInput) {
@@ -303,6 +337,11 @@ public class BundledFfmpegNativeDriver private constructor(
             )
     }
 }
+
+internal data class PreparedDesktopFfmpegOutput(
+    val probe: MediaProbe,
+    val outputInfo: MediaOutputInfo,
+)
 
 private sealed interface SessionState {
     data class Active(

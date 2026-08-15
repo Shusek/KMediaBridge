@@ -40,6 +40,17 @@ tone-map explicit PQ/HLG to SDR, compose selected text subtitles, and convert
 legacy SDR AVI/ASF and WMA-family media to platform-compatible AVC/AAC
 fragmented MP4. Older shared runtimes keep Windows in remux-only mode.
 
+Encoder selection is hardware-first and fail-safe. macOS first opens
+VideoToolbox without software encoding, while Windows first opens Media
+Foundation with `hw_encoding=1` and an NV12 input, then tries its other audited
+hardware candidates. Only after every hardware attempt fails may the same
+platform encoder allow software output or use an available LGPL-compatible
+software encoder. Android HDR-to-SDR output uses MediaCodec, except for the
+existing NVIDIA compatibility override that may select the known-good Android
+software encoder to avoid a device-specific MediaCodec flush failure. Linux
+remains remux-only unless a future authenticated runtime explicitly enables a
+complete transcode capability.
+
 ## One process, one runtime
 
 Before loading the bridge, KMediaBridge initializes `KMediaFfmpegRuntime` and

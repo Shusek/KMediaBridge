@@ -18,6 +18,7 @@ import io.github.shusek.kmediabridge.VideoHandling
 import io.github.shusek.kmediabridge.VideoTrackInfo
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class FfmpegHlsVideoOutputPolicyTest {
     @Test
@@ -63,6 +64,16 @@ class FfmpegHlsVideoOutputPolicyTest {
     @Test
     fun defaultPlaylistHistoryDoesNotAssumeFourSecondFragments() {
         assertEquals(256, request(FfmpegHlsVideoOutputPolicy.PRESERVE_SOURCE).maxBufferedFragments)
+    }
+
+    @Test
+    fun mpegTsRequiresTheAvcAacCompatibilityProfile() {
+        assertFailsWith<IllegalArgumentException> {
+            FfmpegHlsPlaybackRequest(
+                input = MediaInput("/tmp/movie.mkv", MediaInputKind.FILE),
+                segmentContainer = FfmpegHlsSegmentContainer.MPEG2_TS,
+            )
+        }
     }
 
     private fun request(policy: FfmpegHlsVideoOutputPolicy): FfmpegHlsPlaybackRequest =

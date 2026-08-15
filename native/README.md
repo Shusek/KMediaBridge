@@ -4,10 +4,13 @@
 
 It supports Android ARM64/ARMv7, Linux x86_64/ARM64, Windows x86_64 and macOS ARM64. It never builds or packages FFmpeg or the subtitle stack.
 
-ABI 4 supports probing audio/video/subtitle tracks, authenticated runtime
+ABI 5 supports probing audio/video/subtitle tracks, authenticated runtime
 features, lossless selected-track fragmented-MP4 remuxing, optional SDR text
 subtitle composition, and an AVC/AAC compatibility stream. On macOS and
 Windows the full client uses the immutable shared-runtime SDK to decode
 supported legacy SDR AVI/ASF and WMA inputs, normalize the picture to limited
 BT.709, encode AVC with VideoToolbox or Media Foundation plus AAC, and stream
-fragmented MP4 to the platform player.
+fragmented MP4 to the platform player. VideoToolbox is opened hardware-only
+before its software-capable retry. Media Foundation is opened with
+`hw_encoding=1` and NV12 first, followed by other available hardware attempts;
+software-capable attempts are deliberately last.
